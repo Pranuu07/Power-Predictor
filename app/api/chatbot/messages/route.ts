@@ -1,45 +1,33 @@
 import { NextResponse } from "next/server"
-import { connectToDatabase, mockChatMessages } from "@/lib/mongodb"
+import { connectToDatabase } from "@/lib/mongodb"
 
 export async function GET() {
   try {
     const { db } = await connectToDatabase()
-    const messages = await db.collection("chatMessages").find({}).sort({ timestamp: 1 }).toArray()
 
-    if (messages.length === 0) {
-      // Insert initial message
-      await db.collection("chatMessages").insertOne(mockChatMessages[0])
-      return NextResponse.json(mockChatMessages)
-    }
+    // Get recent chat messages (last 50)
+    const messages = await db.collection("chatMessages").find({}).sort({ timestamp: -1 }).limit(50).toArray()
 
-    return NextResponse.json(messages)
+    // Reverse to show oldest first
+    const sortedMessages = messages.reverse()
+
+    return NextResponse.json({ messages: sortedMessages })
   } catch (error) {
-    console.error("Chat messages API error:", error)
-    return NextResponse.json(mockChatMessages)
+    console.error("Failed to fetch messages:", error)
+    return NextResponse.json({ messages: [] })
   }
 }
 
-export async function POST(request: Request) {
+export async function DELETE() {
   try {
-    const { message, sender } = await request.json()
+    const { db } = await connectToDatabase()
 
-    const newMessage = {
-      id: Date.now().toString(),
-      message,
-      sender,
-      timestamp: new Date(),
-    }
+    // Clear all chat messages
+    await db.collection("chatMessages").deleteMany({})
 
-    try {
-      const { db } = await connectToDatabase()
-      await db.collection("chatMessages").insertOne(newMessage)
-    } catch (dbError) {
-      console.warn("Could not save message to database:", dbError)
-    }
-
-    return NextResponse.json(newMessage)
+    return NextResponse.json({ success: true, message: "Chat history cleared" })
   } catch (error) {
-    console.error("Chat message save error:", error)
-    return NextResponse.json({ message: "Failed to save message" }, { status: 500 })
+    console.error("Failed to clear messages:", error)
+    return NextResponse.json({ message: "Failed to clear chat history" }, { status: 500 })
   }
 }

@@ -35,78 +35,31 @@ export async function connectToDatabase(): Promise<{ client: MongoClient; db: Db
     return { client, db }
   } catch (error) {
     console.error("MongoDB connection error:", error)
-    // Return a mock database interface for build time
     throw new Error("Database connection failed")
   }
 }
 
-// Mock data for when database is not available
-export const mockDashboardData = {
-  currentUsage: 245,
-  monthlyBill: 1250,
-  efficiency: 78,
-  savings: 320,
-  usageData: [
-    { month: "Jan", usage: 220, cost: 1100 },
-    { month: "Feb", usage: 180, cost: 950 },
-    { month: "Mar", usage: 240, cost: 1200 },
-    { month: "Apr", usage: 200, cost: 1000 },
-    { month: "May", usage: 260, cost: 1300 },
-    { month: "Jun", usage: 245, cost: 1250 },
+// Initial empty data structure - everything starts at 0
+export const initialDashboardData = {
+  currentUsage: 0,
+  currentBill: 0,
+  aiPrediction: 0,
+  savingsPotential: 0,
+  monthlyData: [
+    { month: "Jan", usage: 0, cost: 0 },
+    { month: "Feb", usage: 0, cost: 0 },
+    { month: "Mar", usage: 0, cost: 0 },
+    { month: "Apr", usage: 0, cost: 0 },
+    { month: "May", usage: 0, cost: 0 },
+    { month: "Jun", usage: 0, cost: 0 },
   ],
-  breakdown: [
-    { category: "Lighting", usage: 45, percentage: 18 },
-    { category: "Cooling", usage: 98, percentage: 40 },
-    { category: "Heating", usage: 49, percentage: 20 },
-    { category: "Appliances", usage: 37, percentage: 15 },
-    { category: "Others", usage: 16, percentage: 7 },
-  ],
-}
-
-export const mockChatMessages = [
-  {
-    id: "1",
-    message: "Hello! How can I help you with your energy consumption today?",
-    sender: "bot",
-    timestamp: new Date(),
-  },
-]
-
-export const mockEnergyTips = [
-  {
-    id: "1",
-    category: "Lighting",
-    title: "Switch to LED Bulbs",
-    description: "LED bulbs use 75% less energy than incandescent bulbs",
-    savings: 25,
-    difficulty: "Easy",
-  },
-  {
-    id: "2",
-    category: "Cooling",
-    title: "Optimize AC Temperature",
-    description: "Set your AC to 24°C instead of 22°C to save energy",
-    savings: 15,
-    difficulty: "Easy",
-  },
-  {
-    id: "3",
-    category: "Appliances",
-    title: "Unplug Devices",
-    description: "Unplug electronics when not in use to avoid phantom loads",
-    savings: 10,
-    difficulty: "Easy",
-  },
-]
-
-export const mockPredictions = {
-  nextMonthUsage: 265,
-  nextMonthCost: 1325,
-  trend: "increasing",
-  confidence: 85,
-  recommendations: [
-    "Consider reducing AC usage during peak hours",
-    "Switch to energy-efficient appliances",
-    "Use natural lighting during daytime",
+  usageBreakdown: [
+    { category: "Air Conditioning", usage: 0, color: "#3b82f6" },
+    { category: "Lighting", usage: 0, color: "#10b981" },
+    { category: "Water Heating", usage: 0, color: "#f59e0b" },
+    { category: "Refrigerator", usage: 0, color: "#ef4444" },
+    { category: "Others", usage: 0, color: "#8b5cf6" },
   ],
 }
+
+export default clientPromise

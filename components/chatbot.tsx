@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { MessageCircle, X, Send } from "lucide-react"
+import { MessageCircle, X, Send, Trash2 } from "lucide-react"
 
 interface Message {
   _id?: string
@@ -36,7 +36,7 @@ export function ChatBot() {
         const welcomeMessage = {
           type: "bot" as const,
           content:
-            "Hi! I'm your energy assistant. I can help you with:\n• Current usage and bills\n• Energy-saving tips\n• Bill calculations\n• AI predictions\n\nWhat would you like to know?",
+            "Hi! I'm your AI energy assistant powered by Gemini. I can help you with:\n\n• Real-time usage analysis\n• Personalized energy-saving tips\n• Bill calculations and predictions\n• Smart recommendations based on your data\n\nStart by using the Bill Calculator to track your consumption, then ask me anything!",
           timestamp: new Date(),
         }
         setMessages([welcomeMessage])
@@ -46,7 +46,7 @@ export function ChatBot() {
       setMessages([
         {
           type: "bot",
-          content: "Hi! I'm your energy assistant. How can I help you save energy today?",
+          content: "Hi! I'm your AI energy assistant. How can I help you save energy today?",
           timestamp: new Date(),
         },
       ])
@@ -85,7 +85,7 @@ export function ChatBot() {
       console.error("Chat error:", error)
       const errorMessage: Message = {
         type: "bot",
-        content: "Sorry, I'm having trouble responding right now. Please try again.",
+        content: "Sorry, I'm having trouble connecting to my AI brain right now. Please try again in a moment.",
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, errorMessage])
@@ -95,21 +95,47 @@ export function ChatBot() {
     }
   }
 
+  const clearChat = async () => {
+    try {
+      await fetch("/api/chatbot/messages", { method: "DELETE" })
+      setMessages([
+        {
+          type: "bot",
+          content: "Chat history cleared! How can I help you with your energy management today?",
+          timestamp: new Date(),
+        },
+      ])
+    } catch (error) {
+      console.error("Failed to clear chat:", error)
+    }
+  }
+
   if (!isOpen) {
     return (
-      <Button className="fixed bottom-4 right-4 rounded-full w-14 h-14 shadow-lg z-50" onClick={() => setIsOpen(true)}>
+      <Button
+        className="fixed bottom-4 right-4 rounded-full w-14 h-14 shadow-lg z-50 bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600"
+        onClick={() => setIsOpen(true)}
+      >
         <MessageCircle className="h-6 w-6" />
       </Button>
     )
   }
 
   return (
-    <Card className="fixed bottom-4 right-4 w-80 h-96 shadow-xl z-50">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">Energy Assistant</CardTitle>
-        <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>
-          <X className="h-4 w-4" />
-        </Button>
+    <Card className="fixed bottom-4 right-4 w-80 h-96 shadow-xl z-50 border-2 border-gradient-to-r from-blue-200 to-green-200">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-r from-blue-50 to-green-50">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          AI Energy Assistant
+        </CardTitle>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" onClick={clearChat} title="Clear chat">
+            <Trash2 className="h-3 w-3" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto space-y-2 mb-4 max-h-64">
@@ -117,24 +143,27 @@ export function ChatBot() {
             <div
               key={message._id || index}
               className={`p-2 rounded-lg text-sm whitespace-pre-line ${
-                message.type === "user" ? "bg-blue-600 text-white ml-8" : "bg-gray-100 text-gray-900 mr-8"
+                message.type === "user"
+                  ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white ml-8"
+                  : "bg-gradient-to-r from-gray-100 to-gray-200 text-gray-900 mr-8"
               }`}
             >
               {message.content}
             </div>
           ))}
           {loading && (
-            <div className="bg-gray-100 text-gray-900 mr-8 p-2 rounded-lg text-sm">
+            <div className="bg-gradient-to-r from-gray-100 to-gray-200 text-gray-900 mr-8 p-2 rounded-lg text-sm">
               <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
                 <div
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                  className="w-2 h-2 bg-green-400 rounded-full animate-bounce"
                   style={{ animationDelay: "0.1s" }}
                 ></div>
                 <div
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                  className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
                   style={{ animationDelay: "0.2s" }}
                 ></div>
+                <span className="text-xs ml-2">AI thinking...</span>
               </div>
             </div>
           )}
@@ -144,11 +173,17 @@ export function ChatBot() {
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask me anything..."
+            placeholder="Ask about your energy usage..."
             onKeyPress={(e) => e.key === "Enter" && handleSend()}
             disabled={loading}
+            className="border-gradient-to-r from-blue-200 to-green-200"
           />
-          <Button size="sm" onClick={handleSend} disabled={loading}>
+          <Button
+            size="sm"
+            onClick={handleSend}
+            disabled={loading}
+            className="bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600"
+          >
             <Send className="h-4 w-4" />
           </Button>
         </div>

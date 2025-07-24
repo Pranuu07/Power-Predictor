@@ -1,32 +1,60 @@
 import { NextResponse } from "next/server"
-import { connectToDatabase, mockDashboardData } from "@/lib/mongodb"
+import { connectToDatabase, initialDashboardData } from "@/lib/mongodb"
 
 export async function GET() {
   try {
-    // Try to connect to database
     const { db } = await connectToDatabase()
 
-    // Check if data exists, if not create sample data
-    let dashboardData = await db.collection("dashboard").findOne({})
+    // Try to get existing dashboard data
+    let dashboardData = await db.collection("dashboard").findOne({ type: "main" })
 
+    // If no data exists, create initial data with all zeros
     if (!dashboardData) {
-      // Create sample data
-      const sampleData = {
-        ...mockDashboardData,
-        lastUpdated: new Date(),
+      dashboardData = {
+        type: "main",
+        ...initialDashboardData,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }
 
-      await db.collection("dashboard").insertOne(sampleData)
-      dashboardData = sampleData
+      await db.collection("dashboard").insertOne(dashboardData)
     }
 
-    return NextResponse.json(dashboardData)
+    return NextResponse.json({
+      currentUsage: dashboardData.currentUsage,
+      currentBill: dashboardData.currentBill,
+      aiPrediction: dashboardData.aiPrediction,
+      savingsPotential: dashboardData.savingsPotential,
+      monthlyData: dashboardData.monthlyData,
+      usageBreakdown: dashboardData.usageBreakdown,
+    })
   } catch (error) {
     console.error("Dashboard API error:", error)
-    // Return mock data if database is not available
-    return NextResponse.json({
-      ...mockDashboardData,
-      lastUpdated: new Date(),
-    })
+    return NextResponse.json({ message: "Failed to fetch dashboard data" }, { status: 500 })
+  }
+}
+
+// POST method to update dashboard data dynamically
+export async function POST(request: Request) {
+  try {
+    const { db } = await connectToDatabase()
+    const updateData = await request.json()
+
+    // Update the dashboard data
+    await db.collection("dashboard").updateOne(
+      { type: "main" },
+      {
+        $set: {
+          ...updateData,
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true },
+    )
+
+    return NextResponse.json({ success: true, message: "Dashboard updated successfully" })
+  } catch (error) {
+    console.error("Dashboard update error:", error)
+    return NextResponse.json({ message: "Failed to update dashboard data" }, { status: 500 })
   }
 }
