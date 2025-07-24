@@ -4,7 +4,6 @@ import { connectToDatabase } from "@/lib/mongodb"
 export async function POST(request: NextRequest) {
   try {
     const { previousReading, currentReading } = await request.json()
-    const { db } = await connectToDatabase()
 
     const unitsConsumed = currentReading - previousReading
 
@@ -51,12 +50,18 @@ export async function POST(request: NextRequest) {
       timestamp: new Date(),
     }
 
-    // Save calculation to MongoDB
-    await db.collection("billCalculations").insertOne({
-      ...result,
-      previousReading,
-      currentReading,
-    })
+    // Try to save calculation to MongoDB
+    try {
+      const { db } = await connectToDatabase()
+      await db.collection("billCalculations").insertOne({
+        ...result,
+        previousReading,
+        currentReading,
+      })
+    } catch (dbError) {
+      console.warn("Could not save to database:", dbError)
+      // Continue without database - calculation still works
+    }
 
     return NextResponse.json(result)
   } catch (error) {

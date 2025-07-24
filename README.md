@@ -65,22 +65,24 @@ A modern, intelligent energy consumption tracking and management system built wi
 
 ### Prerequisites
 - Node.js 18+ installed
-- MongoDB installed locally or MongoDB Atlas account
+- MongoDB installed locally or MongoDB Atlas account (optional - app works without database)
 
 ### Installation
 
 1. **Clone the repository**
 \`\`\`bash
-git clone <repository-url>
-cd power-consumption-dashboard
+git clone https://github.com/Pranuu07/Power-Predictor.git
+cd Power-Predictor
 \`\`\`
 
 2. **Install dependencies**
 \`\`\`bash
 npm install
+# or
+pnpm install
 \`\`\`
 
-3. **Set up environment variables**
+3. **Set up environment variables (Optional)**
 Create a `.env.local` file in the root directory:
 \`\`\`env
 MONGODB_URI=mongodb://localhost:27017/powertracker
@@ -91,7 +93,9 @@ For MongoDB Atlas:
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/powertracker
 \`\`\`
 
-4. **Start MongoDB** (if using local installation)
+**Note**: The app works without MongoDB using mock data for demonstration purposes.
+
+4. **Start MongoDB (Optional - if using local installation)**
 \`\`\`bash
 mongod
 \`\`\`
@@ -99,6 +103,8 @@ mongod
 5. **Run the development server**
 \`\`\`bash
 npm run dev
+# or
+pnpm dev
 \`\`\`
 
 6. **Open your browser**
@@ -146,17 +152,17 @@ The application automatically creates the following MongoDB collections:
 
 ## 🔧 Configuration
 
-### MongoDB Setup
+### MongoDB Setup (Optional)
 1. **Local MongoDB**: Install MongoDB Community Edition
 2. **MongoDB Atlas**: Create a free cluster at [mongodb.com](https://www.mongodb.com/)
 3. **Connection String**: Update `MONGODB_URI` in `.env.local`
 
 ### Environment Variables
 \`\`\`env
-# Required
+# Optional - app works without database
 MONGODB_URI=your_mongodb_connection_string
 
-# Optional (for production)
+# For production deployment
 NEXTAUTH_SECRET=your_secret_key
 NEXTAUTH_URL=your_domain_url
 \`\`\`
@@ -166,8 +172,10 @@ NEXTAUTH_URL=your_domain_url
 ### Vercel Deployment
 1. Push your code to GitHub
 2. Connect your repository to Vercel
-3. Add environment variables in Vercel dashboard
+3. Add environment variables in Vercel dashboard (optional)
 4. Deploy automatically
+
+The app is designed to work without environment variables for easy deployment.
 
 ### Manual Deployment
 \`\`\`bash
@@ -180,20 +188,28 @@ npm start
 ### Smart Bill Calculator
 - **Slab-based Calculation**: Implements tiered pricing structure
 - **Real-time Processing**: Instant bill calculations
-- **Historical Data**: Stores all calculations for analysis
+- **Historical Data**: Stores all calculations for analysis (when database is available)
 - **Detailed Breakdown**: Shows energy charges, taxes, and fixed costs
 
 ### AI Chatbot
 - **Data Integration**: Accesses real user consumption data
 - **Contextual Responses**: Provides personalized advice
 - **Natural Language**: Understands various query formats
-- **Persistent Memory**: Maintains conversation history
+- **Persistent Memory**: Maintains conversation history (when database is available)
 
 ### Energy Predictions
 - **Usage Forecasting**: Predicts next month's consumption
 - **Cost Estimation**: Calculates expected bills
 - **Efficiency Scoring**: Rates energy usage efficiency
 - **Trend Analysis**: Identifies consumption patterns
+
+## 🔄 Fallback Mode
+
+The application is designed to work seamlessly with or without MongoDB:
+
+- **With Database**: Full functionality with data persistence
+- **Without Database**: Uses mock data for demonstration
+- **Hybrid Mode**: Gracefully falls back to mock data if database is unavailable
 
 ## 🤝 Contributing
 
@@ -229,3 +245,9 @@ If you encounter any issues or have questions:
 ---
 
 **PowerTracker** - Making energy management simple, smart, and sustainable! ⚡🌱
+
+## 🚀 Live Demo
+
+The application is deployed and ready to use at: [Your Vercel URL]
+
+No setup required - just visit the link and start exploring your energy dashboard!
