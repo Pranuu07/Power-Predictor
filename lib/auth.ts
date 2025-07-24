@@ -1,9 +1,9 @@
 export interface User {
   id: string
-  name: string
   email: string
+  name: string
+  avatar?: string
   createdAt: string
-  lastLogin: string
 }
 
 export interface AuthState {
@@ -12,144 +12,196 @@ export interface AuthState {
   isLoading: boolean
 }
 
-const USERS_KEY = "powertracker_users"
-const CURRENT_USER_KEY = "powertracker_user"
-const PASSWORD_PREFIX = "powertracker_password_"
-
-export function hashPassword(password: string): string {
-  // Simple hash function for demo purposes
-  let hash = 0
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i)
-    hash = (hash << 5) - hash + char
-    hash = hash & hash // Convert to 32bit integer
-  }
-  return hash.toString()
-}
-
-export function generateUserId(): string {
-  return Date.now().toString() + Math.random().toString(36).substr(2, 9)
-}
-
-export function saveUser(user: User, password: string): void {
-  if (typeof window === "undefined") return
-
-  const users = getUsers()
-  users[user.id] = user
-
-  localStorage.setItem(USERS_KEY, JSON.stringify(users))
-  localStorage.setItem(PASSWORD_PREFIX + user.id, hashPassword(password))
-}
-
-export function getUsers(): Record<string, User> {
-  if (typeof window === "undefined") return {}
-
-  const users = localStorage.getItem(USERS_KEY)
-  return users ? JSON.parse(users) : {}
-}
-
-export function getUserByEmail(email: string): User | null {
-  const users = getUsers()
-  return Object.values(users).find((user) => user.email === email) || null
-}
-
-export function validatePassword(userId: string, password: string): boolean {
-  if (typeof window === "undefined") return false
-
-  const storedHash = localStorage.getItem(PASSWORD_PREFIX + userId)
-  return storedHash === hashPassword(password)
-}
-
-export function getCurrentUser(): User | null {
+// Get current user from localStorage
+export const getCurrentUser = (): User | null => {
   if (typeof window === "undefined") return null
 
-  const userStr = localStorage.getItem(CURRENT_USER_KEY)
-  return userStr ? JSON.parse(userStr) : null
+  try {
+    const stored = localStorage.getItem("powertracker_user")
+    return stored ? JSON.parse(stored) : null
+  } catch (error) {
+    console.error("Error reading user from localStorage:", error)
+    return null
+  }
 }
 
-export function setCurrentUser(user: User | null): void {
+// Save user to localStorage
+export const saveUser = (user: User): void => {
   if (typeof window === "undefined") return
 
-  if (user) {
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user))
-  } else {
-    localStorage.removeItem(CURRENT_USER_KEY)
+  try {
+    localStorage.setItem("powertracker_user", JSON.stringify(user))
+    localStorage.setItem("powertracker_auth_token", "authenticated")
+  } catch (error) {
+    console.error("Error saving user to localStorage:", error)
   }
 }
 
-export function updateUser(userId: string, updates: Partial<User>): User | null {
-  if (typeof window === "undefined") return null
+// Remove user from localStorage
+export const removeUser = (): void => {
+  if (typeof window === "undefined") return
 
-  const users = getUsers()
-  const user = users[userId]
-
-  if (!user) return null
-
-  const updatedUser = { ...user, ...updates }
-  users[userId] = updatedUser
-
-  localStorage.setItem(USERS_KEY, JSON.stringify(users))
-
-  // Update current user if it's the same user
-  const currentUser = getCurrentUser()
-  if (currentUser && currentUser.id === userId) {
-    setCurrentUser(updatedUser)
-  }
-
-  return updatedUser
+  localStorage.removeItem("powertracker_user")
+  localStorage.removeItem("powertracker_auth_token")
 }
 
-export function updatePassword(userId: string, newPassword: string): boolean {
+// Check if user is authenticated
+export const isAuthenticated = (): boolean => {
   if (typeof window === "undefined") return false
 
-  localStorage.setItem(PASSWORD_PREFIX + userId, hashPassword(newPassword))
-  return true
+  const token = localStorage.getItem("powertracker_auth_token")
+  const user = getCurrentUser()
+  return !!(token && user)
 }
 
-export function signUp(
+// Login function
+export const login = async (
+  email: string,
+  password: string,
+): Promise<{ success: boolean; error?: string; user?: User }> => {
+  try {
+    // Simulate API delay
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    // Get stored users
+    const users = getStoredUsers()
+    const user = users.find((u) => u.email === email)
+
+    if (!user) {
+      return { success: false, error: "User not found" }
+    }
+
+    // In a real app, you'd hash and compare passwords
+    const storedPassword = localStorage.getItem(`powertracker_password_${user.id}`)
+    if (storedPassword !== password) {
+      return { success: false, error: "Invalid password" }
+    }
+
+    // Save user session
+    saveUser(user)
+
+    return { success: true, user }
+  } catch (error) {
+    return { success: false, error: "Login failed" }
+  }
+}
+
+// Signup function
+export const signup = async (
   name: string,
   email: string,
   password: string,
-): { success: boolean; message: string; user?: User } {
-  // Check if user already exists
-  const existingUser = getUserByEmail(email)
-  if (existingUser) {
-    return { success: false, message: "User with this email already exists" }
+): Promise<{ success: boolean; error?: string; user?: User }> => {
+  try {
+    // Simulate API delay
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    // Check if user already exists
+    const users = getStoredUsers()
+    if (users.find((u) => u.email === email)) {
+      return { success: false, error: "User already exists" }
+    }
+
+    // Create new user
+    const newUser: User = {
+      id: Date.now().toString(),
+      email,
+      name,
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
+      createdAt: new Date().toISOString(),
+    }
+
+    // Save user
+    users.push(newUser)
+    localStorage.setItem("powertracker_users", JSON.stringify(users))
+    localStorage.setItem(`powertracker_password_${newUser.id}`, password)
+
+    // Save user session
+    saveUser(newUser)
+
+    return { success: true, user: newUser }
+  } catch (error) {
+    return { success: false, error: "Signup failed" }
   }
-
-  // Create new user
-  const user: User = {
-    id: generateUserId(),
-    name,
-    email,
-    createdAt: new Date().toISOString(),
-    lastLogin: new Date().toISOString(),
-  }
-
-  // Save user and password
-  saveUser(user, password)
-  setCurrentUser(user)
-
-  return { success: true, message: "Account created successfully", user }
 }
 
-export function signIn(email: string, password: string): { success: boolean; message: string; user?: User } {
-  const user = getUserByEmail(email)
-
-  if (!user) {
-    return { success: false, message: "User not found" }
-  }
-
-  if (!validatePassword(user.id, password)) {
-    return { success: false, message: "Invalid password" }
-  }
-
-  // Update last login
-  const updatedUser = updateUser(user.id, { lastLogin: new Date().toISOString() })
-
-  return { success: true, message: "Signed in successfully", user: updatedUser || user }
+// Logout function
+export const logout = (): void => {
+  removeUser()
+  // Redirect will be handled by the component
 }
 
-export function signOut(): void {
-  setCurrentUser(null)
+// Get all stored users
+const getStoredUsers = (): User[] => {
+  if (typeof window === "undefined") return []
+
+  try {
+    const stored = localStorage.getItem("powertracker_users")
+    return stored ? JSON.parse(stored) : []
+  } catch (error) {
+    console.error("Error reading users from localStorage:", error)
+    return []
+  }
+}
+
+// Update user profile
+export const updateProfile = async (
+  updates: Partial<Pick<User, "name" | "email">>,
+): Promise<{ success: boolean; error?: string; user?: User }> => {
+  try {
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: "Not authenticated" }
+    }
+
+    // Simulate API delay
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    // Update user
+    const updatedUser = { ...currentUser, ...updates }
+
+    // Update in users list
+    const users = getStoredUsers()
+    const userIndex = users.findIndex((u) => u.id === currentUser.id)
+    if (userIndex !== -1) {
+      users[userIndex] = updatedUser
+      localStorage.setItem("powertracker_users", JSON.stringify(users))
+    }
+
+    // Update current session
+    saveUser(updatedUser)
+
+    return { success: true, user: updatedUser }
+  } catch (error) {
+    return { success: false, error: "Profile update failed" }
+  }
+}
+
+// Change password
+export const changePassword = async (
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const user = getCurrentUser()
+    if (!user) {
+      return { success: false, error: "Not authenticated" }
+    }
+
+    // Simulate API delay
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    // Verify current password
+    const storedPassword = localStorage.getItem(`powertracker_password_${user.id}`)
+    if (storedPassword !== currentPassword) {
+      return { success: false, error: "Current password is incorrect" }
+    }
+
+    // Update password
+    localStorage.setItem(`powertracker_password_${user.id}`, newPassword)
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: "Password change failed" }
+  }
 }

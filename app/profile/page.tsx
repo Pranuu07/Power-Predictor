@@ -1,22 +1,26 @@
 "use client"
 
-import { useState } from "react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Separator } from "@/components/ui/separator"
-import { Eye, EyeOff, User, Calendar, Shield } from "lucide-react"
-import { useAuth } from "@/components/auth-provider"
-import { updateUser, updatePassword, validatePassword } from "@/lib/auth"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { User, Mail, Shield, Eye, EyeOff, CheckCircle } from "lucide-react"
+import { Navigation } from "@/components/navigation"
 import { ProtectedRoute } from "@/components/protected-route"
+import { useAuth } from "@/components/auth-provider"
+import { updateUser, updatePassword } from "@/lib/auth"
 
 export default function ProfilePage() {
-  const { user, refreshUser } = useAuth()
+  const { user, setUser } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
-  const [name, setName] = useState(user?.name || "")
-  const [email, setEmail] = useState(user?.email || "")
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -25,64 +29,109 @@ export default function ProfilePage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
-  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
-  if (!user) return null
+  useEffect(() => {
+    if (user) {
+      setName(user.name)
+      setEmail(user.email)
+    }
+  }, [user])
 
-  const handleUpdateProfile = () => {
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
     setError("")
     setMessage("")
+    setIsLoading(true)
 
-    if (!name.trim() || !email.trim()) {
-      setError("Name and email are required")
+    if (!name.trim()) {
+      setError("Name is required")
+      setIsLoading(false)
       return
     }
 
-    const updatedUser = updateUser(user.id, { name: name.trim(), email: email.trim() })
+    if (!email.trim()) {
+      setError("Email is required")
+      setIsLoading(false)
+      return
+    }
 
-    if (updatedUser) {
-      refreshUser()
-      setIsEditing(false)
-      setMessage("Profile updated successfully")
-    } else {
-      setError("Failed to update profile")
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Please enter a valid email address")
+      setIsLoading(false)
+      return
+    }
+
+    try {
+      if (user) {
+        const updatedUser = updateUser(user.id, {
+          name: name.trim(),
+          email: email.toLowerCase().trim(),
+        })
+
+        if (updatedUser) {
+          setUser(updatedUser)
+          setMessage("Profile updated successfully!")
+          setIsEditing(false)
+        } else {
+          setError("Failed to update profile")
+        }
+      }
+    } catch (err) {
+      setError("An error occurred while updating your profile")
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
     setError("")
     setMessage("")
+    setIsLoading(true)
 
     if (!currentPassword || !newPassword || !confirmPassword) {
       setError("All password fields are required")
-      return
-    }
-
-    if (!validatePassword(user.id, currentPassword)) {
-      setError("Current password is incorrect")
+      setIsLoading(false)
       return
     }
 
     if (newPassword.length < 6) {
       setError("New password must be at least 6 characters long")
+      setIsLoading(false)
       return
     }
 
     if (newPassword !== confirmPassword) {
       setError("New passwords do not match")
+      setIsLoading(false)
       return
     }
 
-    const success = updatePassword(user.id, newPassword)
+    try {
+      if (user) {
+        // Verify current password by attempting to sign in
+        const { validatePassword } = await import("@/lib/auth")
+        if (!validatePassword(user.id, currentPassword)) {
+          setError("Current password is incorrect")
+          setIsLoading(false)
+          return
+        }
 
-    if (success) {
-      setCurrentPassword("")
-      setNewPassword("")
-      setConfirmPassword("")
-      setIsChangingPassword(false)
-      setMessage("Password changed successfully")
-    } else {
-      setError("Failed to change password")
+        const success = updatePassword(user.id, newPassword)
+        if (success) {
+          setMessage("Password changed successfully!")
+          setCurrentPassword("")
+          setNewPassword("")
+          setConfirmPassword("")
+        } else {
+          setError("Failed to change password")
+        }
+      }
+    } catch (err) {
+      setError("An error occurred while changing your password")
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -110,219 +159,222 @@ export default function ProfilePage() {
     return colors[index]
   }
 
+  if (!user) {
+    return null
+  }
+
   return (
     <ProtectedRoute>
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Profile</h1>
-          <p className="text-gray-600 mt-2">Manage your account settings and preferences</p>
-        </div>
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
 
-        {message && (
-          <Alert className="mb-6">
-            <AlertDescription>{message}</AlertDescription>
-          </Alert>
-        )}
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">Profile Settings</h1>
+            <p className="text-gray-600 mt-2">Manage your account information and preferences.</p>
+          </div>
 
-        {error && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+          {message && (
+            <Alert className="mb-6 border-green-200 bg-green-50">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-800">{message}</AlertDescription>
+            </Alert>
+          )}
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Profile Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Profile Information
-              </CardTitle>
-              <CardDescription>Update your personal information</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Avatar */}
-              <div className="flex items-center space-x-4">
-                <div
-                  className={`w-16 h-16 rounded-full ${getAvatarColor(user.name)} flex items-center justify-center text-white text-xl font-bold`}
-                >
-                  {getInitials(user.name)}
+          {error && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Profile Overview */}
+            <Card className="lg:col-span-1">
+              <CardHeader className="text-center">
+                <div className="mx-auto mb-4">
+                  <div
+                    className={`w-20 h-20 rounded-full ${getAvatarColor(user.name)} flex items-center justify-center text-white text-2xl font-bold`}
+                  >
+                    {getInitials(user.name)}
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-medium">{user.name}</h3>
-                  <p className="text-sm text-gray-500">{user.email}</p>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Profile Form */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isEditing} />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={!isEditing}
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  {isEditing ? (
-                    <>
-                      <Button onClick={handleUpdateProfile}>Save Changes</Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setIsEditing(false)
-                          setName(user.name)
-                          setEmail(user.email)
-                          setError("")
-                          setMessage("")
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </>
-                  ) : (
-                    <Button onClick={() => setIsEditing(true)}>Edit Profile</Button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Account Details & Security */}
-          <div className="space-y-6">
-            {/* Account Details */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Account Details
-                </CardTitle>
+                <CardTitle className="text-xl">{user.name}</CardTitle>
+                <CardDescription>{user.email}</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Member since</span>
-                  <span className="text-sm font-medium">{new Date(user.createdAt).toLocaleDateString()}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Last login</span>
-                  <span className="text-sm font-medium">{new Date(user.lastLogin).toLocaleDateString()}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">User ID</span>
-                  <span className="text-sm font-mono text-gray-500">{user.id.slice(0, 8)}...</span>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Member since</span>
+                    <Badge variant="secondary">{new Date(user.createdAt).toLocaleDateString()}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Last login</span>
+                    <Badge variant="outline">{new Date(user.lastLogin).toLocaleDateString()}</Badge>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Security */}
-            <Card>
+            {/* Profile Settings */}
+            <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Security
-                </CardTitle>
-                <CardDescription>Change your password to keep your account secure</CardDescription>
+                <CardTitle>Account Settings</CardTitle>
+                <CardDescription>Update your personal information and security settings.</CardDescription>
               </CardHeader>
               <CardContent>
-                {!isChangingPassword ? (
-                  <Button onClick={() => setIsChangingPassword(true)}>Change Password</Button>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="currentPassword">Current Password</Label>
-                      <div className="relative">
-                        <Input
-                          id="currentPassword"
-                          type={showCurrentPassword ? "text" : "password"}
-                          value={currentPassword}
-                          onChange={(e) => setCurrentPassword(e.target.value)}
-                          placeholder="Enter current password"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                        >
-                          {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </div>
+                <Tabs defaultValue="profile" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="profile">Profile Info</TabsTrigger>
+                    <TabsTrigger value="security">Security</TabsTrigger>
+                  </TabsList>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="newPassword">New Password</Label>
-                      <div className="relative">
-                        <Input
-                          id="newPassword"
-                          type={showNewPassword ? "text" : "password"}
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder="Enter new password (min. 6 characters)"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                          onClick={() => setShowNewPassword(!showNewPassword)}
-                        >
-                          {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
+                  <TabsContent value="profile" className="space-y-4">
+                    <form onSubmit={handleUpdateProfile} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Full Name</Label>
+                        <div className="flex items-center space-x-2">
+                          <User className="h-4 w-4 text-gray-400" />
+                          <Input
+                            id="name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            disabled={!isEditing || isLoading}
+                            placeholder="Enter your full name"
+                          />
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                      <div className="relative">
-                        <Input
-                          id="confirmPassword"
-                          type={showConfirmPassword ? "text" : "password"}
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          placeholder="Confirm new password"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        >
-                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email Address</Label>
+                        <div className="flex items-center space-x-2">
+                          <Mail className="h-4 w-4 text-gray-400" />
+                          <Input
+                            id="email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            disabled={!isEditing || isLoading}
+                            placeholder="Enter your email"
+                          />
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="flex gap-2">
-                      <Button onClick={handleChangePassword}>Update Password</Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setIsChangingPassword(false)
-                          setCurrentPassword("")
-                          setNewPassword("")
-                          setConfirmPassword("")
-                          setError("")
-                          setMessage("")
-                        }}
-                      >
-                        Cancel
+                      <div className="flex items-center space-x-2 pt-4">
+                        {!isEditing ? (
+                          <Button type="button" onClick={() => setIsEditing(true)}>
+                            Edit Profile
+                          </Button>
+                        ) : (
+                          <>
+                            <Button type="submit" disabled={isLoading}>
+                              {isLoading ? "Saving..." : "Save Changes"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setIsEditing(false)
+                                setName(user.name)
+                                setEmail(user.email)
+                                setError("")
+                                setMessage("")
+                              }}
+                              disabled={isLoading}
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </form>
+                  </TabsContent>
+
+                  <TabsContent value="security" className="space-y-4">
+                    <form onSubmit={handleChangePassword} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="currentPassword">Current Password</Label>
+                        <div className="relative">
+                          <div className="flex items-center space-x-2">
+                            <Shield className="h-4 w-4 text-gray-400" />
+                            <Input
+                              id="currentPassword"
+                              type={showCurrentPassword ? "text" : "password"}
+                              value={currentPassword}
+                              onChange={(e) => setCurrentPassword(e.target.value)}
+                              placeholder="Enter current password"
+                              disabled={isLoading}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                              disabled={isLoading}
+                            >
+                              {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="newPassword">New Password</Label>
+                        <div className="relative">
+                          <div className="flex items-center space-x-2">
+                            <Shield className="h-4 w-4 text-gray-400" />
+                            <Input
+                              id="newPassword"
+                              type={showNewPassword ? "text" : "password"}
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              placeholder="Enter new password (min. 6 characters)"
+                              disabled={isLoading}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setShowNewPassword(!showNewPassword)}
+                              disabled={isLoading}
+                            >
+                              {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                        <div className="relative">
+                          <div className="flex items-center space-x-2">
+                            <Shield className="h-4 w-4 text-gray-400" />
+                            <Input
+                              id="confirmPassword"
+                              type={showConfirmPassword ? "text" : "password"}
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              placeholder="Confirm new password"
+                              disabled={isLoading}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              disabled={isLoading}
+                            >
+                              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button type="submit" disabled={isLoading}>
+                        {isLoading ? "Changing Password..." : "Change Password"}
                       </Button>
-                    </div>
-                  </div>
-                )}
+                    </form>
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </div>

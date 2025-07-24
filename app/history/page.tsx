@@ -3,240 +3,467 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { Trash2, Calendar, TrendingUp, DollarSign, Zap } from "lucide-react"
-import { getBillCalculations, deleteBillCalculation, clearAllBillCalculations } from "@/lib/localStorage"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Calendar, Search, Download, Trash2, TrendingUp, TrendingDown } from "lucide-react"
+import { Navigation } from "@/components/navigation"
 import { ProtectedRoute } from "@/components/protected-route"
+import { getStoredData, saveStoredData } from "@/lib/localStorage"
 
 interface BillCalculation {
   id: string
-  previousReading: number
-  currentReading: number
-  unitsConsumed: number
-  energyCharges: number
-  fixedCharges: number
-  taxes: number
-  totalBill: number
-  calculatedAt: string
+  date: string
+  totalUsage: number
+  totalCost: number
+  appliances: Array<{
+    name: string
+    wattage: number
+    hoursPerDay: number
+    daysPerMonth: number
+    monthlyCost: number
+  }>
+  rateStructure: string
+  notes?: string
 }
 
 export default function HistoryPage() {
-  const [bills, setBills] = useState<BillCalculation[]>([])
-  const [isDeleting, setIsDeleting] = useState<string | null>(null)
-  const [isClearing, setIsClearing] = useState(false)
+  const [calculations, setCalculations] = useState<BillCalculation[]>([])
+  const [filteredCalculations, setFilteredCalculations] = useState<BillCalculation[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [sortBy, setSortBy] = useState("date")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
+  const [filterPeriod, setFilterPeriod] = useState("all")
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const billHistory = getBillCalculations()
-    setBills(billHistory.sort((a, b) => new Date(b.calculatedAt).getTime() - new Date(a.calculatedAt).getTime()))
+    const loadCalculations = () => {
+      try {
+        const data = getStoredData()
+        const billCalculations = data.billCalculations || []
+        setCalculations(billCalculations)
+        setFilteredCalculations(billCalculations)
+      } catch (error) {
+        console.error("Error loading calculations:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadCalculations()
   }, [])
 
-  const handleDeleteBill = (billId: string) => {
-    setIsDeleting(billId)
-    deleteBillCalculation(billId)
-    setBills(bills.filter((bill) => bill.id !== billId))
-    setIsDeleting(null)
+  useEffect(() => {
+    let filtered = [...calculations]
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (calc) =>
+          calc.appliances.some((app) => app.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          calc.rateStructure.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          calc.notes?.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    // Apply period filter
+    if (filterPeriod !== "all") {
+      const now = new Date()
+      const filterDate = new Date()
+
+      switch (filterPeriod) {
+        case "week":
+          filterDate.setDate(now.getDate() - 7)
+          break
+        case "month":
+          filterDate.setMonth(now.getMonth() - 1)
+          break
+        case "quarter":
+          filterDate.setMonth(now.getMonth() - 3)
+          break
+        case "year":
+          filterDate.setFullYear(now.getFullYear() - 1)
+          break
+      }
+
+      filtered = filtered.filter((calc) => new Date(calc.date) >= filterDate)
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aValue: any, bValue: any
+
+      switch (sortBy) {
+        case "date":
+          aValue = new Date(a.date)
+          bValue = new Date(b.date)
+          break
+        case "usage":
+          aValue = a.totalUsage
+          bValue = b.totalUsage
+          break
+        case "cost":
+          aValue = a.totalCost
+          bValue = b.totalCost
+          break
+        default:
+          aValue = new Date(a.date)
+          bValue = new Date(b.date)
+      }
+
+      if (sortOrder === "asc") {
+        return aValue > bValue ? 1 : -1
+      } else {
+        return aValue < bValue ? 1 : -1
+      }
+    })
+
+    setFilteredCalculations(filtered)
+  }, [calculations, searchTerm, sortBy, sortOrder, filterPeriod])
+
+  const deleteCalculation = (id: string) => {
+    if (confirm("Are you sure you want to delete this calculation?")) {
+      const updatedCalculations = calculations.filter((calc) => calc.id !== id)
+      setCalculations(updatedCalculations)
+
+      const data = getStoredData()
+      saveStoredData({ ...data, billCalculations: updatedCalculations })
+    }
   }
 
-  const handleClearHistory = () => {
-    setIsClearing(true)
-    clearAllBillCalculations()
-    setBills([])
-    setIsClearing(false)
+  const exportToCSV = () => {
+    const headers = ["Date", "Total Usage (kWh)", "Total Cost ($)", "Rate Structure", "Appliances", "Notes"]
+    const csvContent = [
+      headers.join(","),
+      ...filteredCalculations.map((calc) =>
+        [
+          calc.date,
+          calc.totalUsage.toFixed(2),
+          calc.totalCost.toFixed(2),
+          calc.rateStructure,
+          calc.appliances.map((app) => `${app.name} (${app.wattage}W)`).join("; "),
+          calc.notes || "",
+        ]
+          .map((field) => `"${field}"`)
+          .join(","),
+      ),
+    ].join("\n")
+
+    const blob = new Blob([csvContent], { type: "text/csv" })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `power-tracker-history-${new Date().toISOString().split("T")[0]}.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
   }
 
-  const totalUnits = bills.reduce((sum, bill) => sum + bill.unitsConsumed, 0)
-  const totalAmount = bills.reduce((sum, bill) => sum + bill.totalBill, 0)
-  const averageBill = bills.length > 0 ? totalAmount / bills.length : 0
+  const getUsageTrend = (currentUsage: number, previousUsage?: number) => {
+    if (!previousUsage) return null
+
+    const change = ((currentUsage - previousUsage) / previousUsage) * 100
+    return {
+      direction: change > 0 ? "up" : "down",
+      percentage: Math.abs(change),
+    }
+  }
+
+  const calculateStats = () => {
+    if (filteredCalculations.length === 0) {
+      return {
+        totalCalculations: 0,
+        averageUsage: 0,
+        averageCost: 0,
+        totalUsage: 0,
+        totalCost: 0,
+      }
+    }
+
+    const totalUsage = filteredCalculations.reduce((sum, calc) => sum + calc.totalUsage, 0)
+    const totalCost = filteredCalculations.reduce((sum, calc) => sum + calc.totalCost, 0)
+
+    return {
+      totalCalculations: filteredCalculations.length,
+      averageUsage: totalUsage / filteredCalculations.length,
+      averageCost: totalCost / filteredCalculations.length,
+      totalUsage,
+      totalCost,
+    }
+  }
+
+  const stats = calculateStats()
+
+  if (isLoading) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-gray-50">
+          <Navigation />
+          <div className="flex items-center justify-center h-96">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading history...</p>
+            </div>
+          </div>
+        </div>
+      </ProtectedRoute>
+    )
+  }
 
   return (
     <ProtectedRoute>
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Bill History</h1>
-            <p className="text-gray-600 mt-2">View and manage your electricity bill calculations</p>
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">Calculation History</h1>
+            <p className="text-gray-600 mt-2">View and manage your electricity bill calculations and usage history.</p>
           </div>
 
-          {bills.length > 0 && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 bg-transparent">
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Clear History
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Clear All History</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will permanently delete all your bill calculation history. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleClearHistory}
-                    disabled={isClearing}
-                    className="bg-red-600 hover:bg-red-700"
-                  >
-                    {isClearing ? "Clearing..." : "Clear History"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </div>
-
-        {bills.length > 0 && (
-          <>
-            {/* Summary Statistics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Calculations</CardTitle>
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{bills.length}</div>
-                  <p className="text-xs text-muted-foreground">Bill calculations</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Units</CardTitle>
-                  <Zap className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{totalUnits.toFixed(0)} kWh</div>
-                  <p className="text-xs text-muted-foreground">Consumed</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Average Bill</CardTitle>
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">₹{averageBill.toFixed(0)}</div>
-                  <p className="text-xs text-muted-foreground">Per calculation</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Bills Table */}
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <Card>
-              <CardHeader>
-                <CardTitle>Bill Calculations</CardTitle>
-                <CardDescription>Detailed history of your electricity bill calculations</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Calculations</CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
+                <div className="text-2xl font-bold">{stats.totalCalculations}</div>
+                <p className="text-xs text-muted-foreground">
+                  {filterPeriod === "all" ? "All time" : `Last ${filterPeriod}`}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Average Usage</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.averageUsage.toFixed(0)} kWh</div>
+                <p className="text-xs text-muted-foreground">Per calculation</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Average Cost</CardTitle>
+                <TrendingDown className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${stats.averageCost.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">Per calculation</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${stats.totalCost.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">
+                  {filterPeriod === "all" ? "All time" : `Last ${filterPeriod}`}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Filters and Search */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Filter & Search</CardTitle>
+              <CardDescription>
+                Filter your calculations by date, search by appliance, or sort by different criteria.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="search">Search</Label>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="search"
+                      placeholder="Search appliances, notes..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Time Period</Label>
+                  <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="week">Last Week</SelectItem>
+                      <SelectItem value="month">Last Month</SelectItem>
+                      <SelectItem value="quarter">Last 3 Months</SelectItem>
+                      <SelectItem value="year">Last Year</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Sort By</Label>
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date">Date</SelectItem>
+                      <SelectItem value="usage">Usage</SelectItem>
+                      <SelectItem value="cost">Cost</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Order</Label>
+                  <Select value={sortOrder} onValueChange={(value: "asc" | "desc") => setSortOrder(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="desc">Newest First</SelectItem>
+                      <SelectItem value="asc">Oldest First</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mt-4">
+                <p className="text-sm text-gray-600">
+                  Showing {filteredCalculations.length} of {calculations.length} calculations
+                </p>
+                <Button onClick={exportToCSV} variant="outline" size="sm">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export CSV
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* History Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Calculation History</CardTitle>
+              <CardDescription>Detailed view of all your electricity bill calculations.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {filteredCalculations.length === 0 ? (
+                <div className="text-center py-12">
+                  <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No calculations found</h3>
+                  <p className="text-gray-600 mb-4">
+                    {calculations.length === 0
+                      ? "You haven't made any bill calculations yet."
+                      : "No calculations match your current filters."}
+                  </p>
+                  {calculations.length === 0 && (
+                    <Button asChild>
+                      <a href="/calculator">Calculate Your First Bill</a>
+                    </Button>
+                  )}
+                </div>
+              ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Date</TableHead>
-                        <TableHead>Previous Reading</TableHead>
-                        <TableHead>Current Reading</TableHead>
-                        <TableHead>Units Consumed</TableHead>
-                        <TableHead>Energy Charges</TableHead>
-                        <TableHead>Fixed Charges</TableHead>
-                        <TableHead>Taxes</TableHead>
-                        <TableHead>Total Bill</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead>Usage (kWh)</TableHead>
+                        <TableHead>Cost ($)</TableHead>
+                        <TableHead>Rate Structure</TableHead>
+                        <TableHead>Appliances</TableHead>
+                        <TableHead>Trend</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {bills.map((bill) => (
-                        <TableRow key={bill.id}>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{new Date(bill.calculatedAt).toLocaleDateString()}</span>
-                              <span className="text-xs text-gray-500">
-                                {new Date(bill.calculatedAt).toLocaleTimeString()}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>{bill.previousReading}</TableCell>
-                          <TableCell>{bill.currentReading}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">{bill.unitsConsumed} kWh</Badge>
-                          </TableCell>
-                          <TableCell>₹{bill.energyCharges.toFixed(2)}</TableCell>
-                          <TableCell>₹{bill.fixedCharges.toFixed(2)}</TableCell>
-                          <TableCell>₹{bill.taxes.toFixed(2)}</TableCell>
-                          <TableCell>
-                            <Badge variant="default">₹{bill.totalBill.toFixed(2)}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-600 hover:text-red-700"
-                                  disabled={isDeleting === bill.id}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete Bill Calculation</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to delete this bill calculation? This action cannot be undone.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleDeleteBill(bill.id)}
-                                    className="bg-red-600 hover:bg-red-700"
+                      {filteredCalculations.map((calculation, index) => {
+                        const previousCalculation = filteredCalculations[index + 1]
+                        const trend = getUsageTrend(calculation.totalUsage, previousCalculation?.totalUsage)
+
+                        return (
+                          <TableRow key={calculation.id}>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{new Date(calculation.date).toLocaleDateString()}</div>
+                                <div className="text-sm text-gray-500">
+                                  {new Date(calculation.date).toLocaleTimeString()}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium">{calculation.totalUsage.toFixed(0)} kWh</div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium">${calculation.totalCost.toFixed(2)}</div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{calculation.rateStructure}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="max-w-xs">
+                                <div className="text-sm">
+                                  {calculation.appliances
+                                    .slice(0, 2)
+                                    .map((app) => app.name)
+                                    .join(", ")}
+                                  {calculation.appliances.length > 2 && (
+                                    <span className="text-gray-500"> +{calculation.appliances.length - 2} more</span>
+                                  )}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {trend && (
+                                <div className="flex items-center space-x-1">
+                                  {trend.direction === "up" ? (
+                                    <TrendingUp className="h-4 w-4 text-red-500" />
+                                  ) : (
+                                    <TrendingDown className="h-4 w-4 text-green-500" />
+                                  )}
+                                  <span
+                                    className={`text-sm ${
+                                      trend.direction === "up" ? "text-red-600" : "text-green-600"
+                                    }`}
                                   >
-                                    Delete
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                                    {trend.percentage.toFixed(1)}%
+                                  </span>
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => deleteCalculation(calculation.id)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </div>
-              </CardContent>
-            </Card>
-          </>
-        )}
-
-        {bills.length === 0 && (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <TrendingUp className="h-16 w-16 text-gray-300 mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No Bill History</h3>
-              <p className="text-gray-600 text-center mb-6">
-                You haven't calculated any bills yet. Start by using the Bill Calculator to track your electricity
-                usage.
-              </p>
-              <Button asChild>
-                <a href="/calculator">Calculate Your First Bill</a>
-              </Button>
+              )}
             </CardContent>
           </Card>
-        )}
+        </div>
       </div>
     </ProtectedRoute>
   )

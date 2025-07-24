@@ -73,22 +73,45 @@ export const initialDashboardData: DashboardData = {
   lastUpdated: new Date().toISOString(),
 }
 
+// Generic storage functions (missing exports that were referenced)
+export const getStoredData = <T>(key: string, defaultValue: T): T => {\
+  if (typeof window === "undefined") return defaultValue
+
+  try {\
+    const stored = localStorage.getItem(key)
+    return stored ? JSON.parse(stored) : defaultValue
+  } catch (error) {
+    console.error(`Error reading from localStorage key "${key}":`, error)\
+    return defaultValue
+  }
+}
+
+export const saveStoredData = <T>(key: string, data: T): void => {\
+  if (typeof window === "undefined") return
+
+  try {
+    localStorage.setItem(key, JSON.stringify(data))
+  } catch (error) {
+    console.error(`Error saving to localStorage key "${key}":`, error)
+  }
+}
+
 // Dashboard data functions
-export const getDashboardData = (): DashboardData => {
+export const getDashboardData = (): DashboardData => {\
   if (typeof window === "undefined") return initialDashboardData
 
   const stored = localStorage.getItem("powertracker_dashboard")
   if (!stored) {
-    localStorage.setItem("powertracker_dashboard", JSON.stringify(initialDashboardData))
+    localStorage.setItem("powertracker_dashboard", JSON.stringify(initialDashboardData))\
     return initialDashboardData
   }
   return JSON.parse(stored)
 }
 
-export const saveDashboardData = (data: Partial<DashboardData>): void => {
+export const saveDashboardData = (data: Partial<DashboardData>): void => {\
   if (typeof window === "undefined") return
 
-  const current = getDashboardData()
+  const current = getDashboardData()\
   const updated = { ...current, ...data, lastUpdated: new Date().toISOString() }
   localStorage.setItem("powertracker_dashboard", JSON.stringify(updated))
 
@@ -97,19 +120,19 @@ export const saveDashboardData = (data: Partial<DashboardData>): void => {
 }
 
 // Bill calculations functions
-export const getBillCalculations = (): BillCalculation[] => {
+export const getBillCalculations = (): BillCalculation[] => {\
   if (typeof window === "undefined") return []
 
   const stored = localStorage.getItem("powertracker_bills")
   return stored ? JSON.parse(stored) : []
 }
-
-export const saveBillCalculation = (calculation: Omit<BillCalculation, "id" | "timestamp">): BillCalculation => {
-  if (typeof window === "undefined") return { ...calculation, id: "", timestamp: "" }
+\
+export const saveBillCalculation = (calculation: Omit<BillCalculation, "id" | "timestamp">): BillCalculation => {\
+  if (typeof window === "undefined\") return { ...calculation, id: "", timestamp: "" }
 
   const bills = getBillCalculations()
   const newBill: BillCalculation = {
-    ...calculation,
+    ...calculation,\
     id: Date.now().toString(),
     timestamp: new Date().toISOString(),
   }
@@ -118,7 +141,7 @@ export const saveBillCalculation = (calculation: Omit<BillCalculation, "id" | "t
   localStorage.setItem("powertracker_bills", JSON.stringify(bills))
 
   // Update dashboard with new data
-  saveDashboardData({
+  saveDashboardData({\
     currentUsage: calculation.unitsConsumed,
     currentBill: calculation.totalBill,
   })
@@ -130,18 +153,18 @@ export const saveBillCalculation = (calculation: Omit<BillCalculation, "id" | "t
 }
 
 // Chat messages functions
-export const getChatMessages = (): ChatMessage[] => {
+export const getChatMessages = (): ChatMessage[] => {\
   if (typeof window === "undefined") return []
 
   const stored = localStorage.getItem("powertracker_chat")
   return stored ? JSON.parse(stored) : []
 }
 
-export const saveChatMessage = (type: "user" | "bot", content: string): ChatMessage => {
-  if (typeof window === "undefined") return { id: "", type, content, timestamp: "" }
+export const saveChatMessage = (type: "user" | "bot", content: string): ChatMessage => {\
+  if (typeof window === "undefined\") return { id: "", type, content, timestamp: "" }
 
   const messages = getChatMessages()
-  const newMessage: ChatMessage = {
+  const newMessage: ChatMessage = {\
     id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
     type,
     content,
@@ -158,15 +181,15 @@ export const saveChatMessage = (type: "user" | "bot", content: string): ChatMess
   return newMessage
 }
 
-export const clearChatMessages = (): void => {
+export const clearChatMessages = (): void => {\
   if (typeof window === "undefined") return
   localStorage.removeItem("powertracker_chat")
 }
 
 // Predictions functions
-export const getPredictions = (): Prediction => {
-  if (typeof window === "undefined") {
-    return {
+export const getPredictions = (): Prediction => {\
+  if (typeof window === "undefined") {\
+    return {\
       nextMonthUsage: 0,
       nextMonthCost: 0,
       efficiencyScore: 0,
@@ -178,7 +201,7 @@ export const getPredictions = (): Prediction => {
   }
 
   const stored = localStorage.getItem("powertracker_predictions")
-  if (!stored) {
+  if (!stored) {\
     const dashboardData = getDashboardData()
     return generatePredictions(dashboardData)
   }
@@ -186,7 +209,7 @@ export const getPredictions = (): Prediction => {
 }
 
 // Update the generatePredictions function
-export const generatePredictions = (dashboardData: DashboardData): Prediction => {
+export const generatePredictions = (dashboardData: DashboardData): Prediction => {\
   const bills = getBillCalculations()
   const currentUsage = dashboardData.currentUsage
 
@@ -207,7 +230,7 @@ export const generatePredictions = (dashboardData: DashboardData): Prediction =>
       lastUpdated: new Date().toISOString(),
     }
   } else {
-    // Calculate predictions based on historical data
+    // Calculate predictions based on historical data\
     const avgUsage =
       bills.length > 0 ? bills.reduce((sum, bill) => sum + bill.unitsConsumed, 0) / bills.length : currentUsage
 
@@ -217,16 +240,16 @@ export const generatePredictions = (dashboardData: DashboardData): Prediction =>
 
     predictions = {
       nextMonthUsage,
-      nextMonthCost,
+      nextMonthCost,\
       efficiencyScore: Math.round(efficiencyScore),
-      trend: nextMonthUsage > currentUsage ? "increasing" : nextMonthUsage < currentUsage ? "decreasing" : "stable",
+      trend: nextMonthUsage > currentUsage ? "increasing\" : nextMonthUsage < currentUsage ? "decreasing" : "stable",\
       confidence: bills.length > 2 ? 85 : 60,
       recommendations: generateRecommendations(currentUsage, efficiencyScore),
       lastUpdated: new Date().toISOString(),
     }
 
     // Update dashboard with AI prediction
-    saveDashboardData({
+    saveDashboardData({\
       aiPrediction: nextMonthUsage,
       savingsPotential: Math.max(0, Math.round((currentUsage - nextMonthUsage) * 5.5)),
     })
@@ -240,7 +263,7 @@ export const generatePredictions = (dashboardData: DashboardData): Prediction =>
 }
 
 // Add function to update monthly data with history
-export const updateMonthlyHistory = (unitsConsumed: number, totalBill: number): void => {
+export const updateMonthlyHistory = (unitsConsumed: number, totalBill: number): void => {\
   if (typeof window === "undefined") return
 
   const dashboardData = getDashboardData()

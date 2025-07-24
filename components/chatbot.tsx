@@ -2,226 +2,254 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { getChatMessages, saveChatMessage, getDashboardData, getBillCalculations } from "@/lib/localStorage"
-import { MessageCircle, Send, Bot, User } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { MessageCircle, Send, X, Bot, User, Loader2 } from "lucide-react"
+import { getStoredData, saveStoredData } from "@/lib/localStorage"
 
 interface Message {
   id: string
-  type: "user" | "bot"
   content: string
-  timestamp: string
+  role: "user" | "assistant"
+  timestamp: Date
 }
 
-export function ChatBot() {
+export function Chatbot() {
+  const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
-  const [inputValue, setInputValue] = useState("")
-  const [isTyping, setIsTyping] = useState(false)
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const [input, setInput] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
 
   useEffect(() => {
-    // Load chat history
-    const chatHistory = getChatMessages()
-    setMessages(chatHistory)
+    scrollToBottom()
+  }, [messages])
 
-    // Add welcome message if no messages exist
-    if (chatHistory.length === 0) {
-      const welcomeMessage = saveChatMessage(
-        "bot",
-        "Hello! I'm your AI energy assistant. I can help you understand your energy usage, provide saving tips, and answer questions about your electricity bills. How can I help you today?",
+  useEffect(() => {
+    // Load chat history when component mounts
+    const data = getStoredData()
+    if (data.chatHistory) {
+      setMessages(
+        data.chatHistory.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        })),
       )
-      setMessages([welcomeMessage])
     }
   }, [])
 
-  useEffect(() => {
-    // Scroll to bottom when new messages are added
-    scrollAreaRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
-
-  const generateBotResponse = (userMessage: string): string => {
-    const dashboardData = getDashboardData()
-    const bills = getBillCalculations()
-    const lowerMessage = userMessage.toLowerCase()
-
-    // Greeting responses
-    if (lowerMessage.includes("hello") || lowerMessage.includes("hi") || lowerMessage.includes("hey")) {
-      return "Hello! I'm here to help you with your energy management. You can ask me about your usage, bills, or energy-saving tips."
-    }
-
-    // Usage-related questions
-    if (lowerMessage.includes("usage") || lowerMessage.includes("consumption")) {
-      if (dashboardData.currentUsage === 0) {
-        return "You haven't recorded any energy usage yet. Use the Bill Calculator to enter your meter readings and start tracking your consumption!"
-      }
-      return `Your current monthly usage is ${dashboardData.currentUsage} kWh. ${dashboardData.currentUsage > 300 ? "This is quite high - consider implementing energy-saving measures." : dashboardData.currentUsage > 200 ? "This is moderate usage - there's room for optimization." : "Great! You're maintaining good energy efficiency."}`
-    }
-
-    // Bill-related questions
-    if (lowerMessage.includes("bill") || lowerMessage.includes("cost") || lowerMessage.includes("money")) {
-      if (dashboardData.currentBill === 0) {
-        return "You haven't calculated any bills yet. Use the Bill Calculator to see your electricity costs and start tracking your expenses."
-      }
-      return `Your current monthly bill is ₹${dashboardData.currentBill}. ${bills.length > 1 ? `You've calculated ${bills.length} bills so far with an average of ₹${Math.round(bills.reduce((sum, bill) => sum + bill.totalBill, 0) / bills.length)}.` : "Calculate more bills to see trends and get better insights."}`
-    }
-
-    // Savings and tips
-    if (
-      lowerMessage.includes("save") ||
-      lowerMessage.includes("reduce") ||
-      lowerMessage.includes("tips") ||
-      lowerMessage.includes("lower")
-    ) {
-      const tips = [
-        "Set your AC to 24°C instead of lower temperatures - each degree can save 6% energy",
-        "Switch to LED bulbs which use 75% less energy than traditional bulbs",
-        "Unplug devices when not in use to avoid phantom power consumption",
-        "Use natural light during daytime to reduce artificial lighting needs",
-        "Regular maintenance of appliances improves their efficiency",
-      ]
-      const randomTip = tips[Math.floor(Math.random() * tips.length)]
-      return `Here's a great energy-saving tip: ${randomTip}. Check out the Tips page for more personalized recommendations!`
-    }
-
-    // Predictions
-    if (lowerMessage.includes("predict") || lowerMessage.includes("forecast") || lowerMessage.includes("next month")) {
-      if (dashboardData.aiPrediction === 0) {
-        return "I need more data to make accurate predictions. Calculate a few bills first, and I'll be able to forecast your future usage and costs!"
-      }
-      return `Based on your usage patterns, I predict you'll consume around ${dashboardData.aiPrediction} kWh next month. Visit the Predictions page for detailed AI insights and recommendations.`
-    }
-
-    // AC/Cooling related
-    if (lowerMessage.includes("ac") || lowerMessage.includes("air condition") || lowerMessage.includes("cooling")) {
-      return "Air conditioning typically accounts for 40% of your electricity bill. To save energy: set temperature to 24°C, clean filters regularly, and use fans to circulate air better."
-    }
-
-    if (lowerMessage.includes("refrigerator") || lowerMessage.includes("fridge")) {
-      return "Refrigerators run 24/7, so efficiency matters! Keep the temperature at 3-4°C, don't overfill it, and ensure door seals are tight. Defrost regularly if it's not frost-free."
-    }
-
-    // Help or general questions
-    if (lowerMessage.includes("help") || lowerMessage.includes("what can you do")) {
-      return "I can help you with:\n• Understanding your energy usage and bills\n• Providing energy-saving tips\n• Explaining your consumption patterns\n• Giving predictions about future usage\n• Answering questions about appliances and efficiency\n\nJust ask me anything about energy management!"
-    }
-
-    // Default responses
-    const defaultResponses = [
-      "That's an interesting question! For specific energy advice, I'd recommend checking your usage patterns in the dashboard and implementing the tips from the Tips page.",
-      "I'm here to help with energy management! You can ask me about your usage, bills, saving tips, or predictions. What would you like to know?",
-      "For the best energy insights, make sure to regularly calculate your bills and track your usage. This helps me provide more accurate advice!",
-      "Energy efficiency is all about small changes that add up! Check out your personalized tips or ask me about specific appliances.",
+  const saveMessage = (message: Message) => {
+    const data = getStoredData()
+    const updatedHistory = [
+      ...(data.chatHistory || []),
+      {
+        ...message,
+        timestamp: message.timestamp.toISOString(),
+      },
     ]
-
-    return defaultResponses[Math.floor(Math.random() * defaultResponses.length)]
+    saveStoredData({ ...data, chatHistory: updatedHistory })
   }
 
-  const handleSendMessage = async () => {
-    if (!inputValue.trim()) return
+  const generateResponse = async (userMessage: string): Promise<string> => {
+    // Simulate AI response based on user input
+    const lowerMessage = userMessage.toLowerCase()
 
-    const userMessage = saveChatMessage("user", inputValue.trim())
+    if (lowerMessage.includes("usage") || lowerMessage.includes("consumption")) {
+      const data = getStoredData()
+      const calculations = data.billCalculations || []
+      if (calculations.length > 0) {
+        const latest = calculations[calculations.length - 1]
+        return `Based on your latest calculation, you're using ${latest.totalUsage.toFixed(0)} kWh per month, which costs approximately $${latest.totalCost.toFixed(2)}. This is ${latest.totalUsage > 800 ? "above" : "below"} the average household consumption.`
+      }
+      return "I don't see any usage calculations yet. Try using the Bill Calculator to track your energy consumption first!"
+    }
+
+    if (lowerMessage.includes("save") || lowerMessage.includes("reduce") || lowerMessage.includes("tips")) {
+      return "Here are some energy-saving tips: 1) Use LED bulbs instead of incandescent ones, 2) Unplug devices when not in use, 3) Set your thermostat 2-3 degrees higher in summer and lower in winter, 4) Use energy-efficient appliances, 5) Seal air leaks around windows and doors."
+    }
+
+    if (lowerMessage.includes("bill") || lowerMessage.includes("cost")) {
+      return "To calculate your electricity bill accurately, I need to know your appliance usage. Use the Bill Calculator feature to input your appliances and their usage hours. The calculator considers different rate structures and provides detailed breakdowns."
+    }
+
+    if (lowerMessage.includes("prediction") || lowerMessage.includes("forecast")) {
+      return "Based on your usage patterns, I can help predict future consumption. The Predictions page uses your historical data to forecast upcoming bills and suggest optimal usage patterns. Regular tracking helps improve prediction accuracy."
+    }
+
+    if (lowerMessage.includes("hello") || lowerMessage.includes("hi") || lowerMessage.includes("help")) {
+      return "Hello! I'm your energy assistant. I can help you with:\n• Understanding your energy usage\n• Providing energy-saving tips\n• Explaining your electricity bills\n• Offering predictions based on your data\n\nWhat would you like to know about your energy consumption?"
+    }
+
+    return "I'm here to help with your energy questions! You can ask me about your usage patterns, energy-saving tips, bill calculations, or predictions. What specific aspect of your energy consumption would you like to discuss?"
+  }
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: input.trim(),
+      role: "user",
+      timestamp: new Date(),
+    }
+
     setMessages((prev) => [...prev, userMessage])
-    setInputValue("")
-    setIsTyping(true)
+    saveMessage(userMessage)
+    setInput("")
+    setIsLoading(true)
 
-    // Simulate typing delay
-    setTimeout(
-      () => {
-        const botResponse = generateBotResponse(inputValue.trim())
-        const botMessage = saveChatMessage("bot", botResponse)
-        setMessages((prev) => [...prev, botMessage])
-        setIsTyping(false)
-      },
-      1000 + Math.random() * 1000,
-    ) // Random delay between 1-2 seconds
+    try {
+      // Simulate API delay
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      const responseContent = await generateResponse(userMessage.content)
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: responseContent,
+        role: "assistant",
+        timestamp: new Date(),
+      }
+
+      setMessages((prev) => [...prev, assistantMessage])
+      saveMessage(assistantMessage)
+    } catch (error) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: "I'm sorry, I encountered an error. Please try again.",
+        role: "assistant",
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+      saveMessage(errorMessage)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleSendMessage()
+      handleSend()
     }
   }
 
+  const clearChat = () => {
+    setMessages([])
+    const data = getStoredData()
+    saveStoredData({ ...data, chatHistory: [] })
+  }
+
+  if (!isOpen) {
+    return (
+      <div className="fixed bottom-4 right-4 z-50">
+        <Button onClick={() => setIsOpen(true)} className="rounded-full w-14 h-14 shadow-lg" size="lg">
+          <MessageCircle className="h-6 w-6" />
+        </Button>
+        {messages.length > 0 && (
+          <Badge className="absolute -top-2 -left-2 bg-red-500">
+            {messages.filter((m) => m.role === "assistant").length}
+          </Badge>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col h-96 border rounded-lg bg-white">
-      <div className="flex items-center space-x-2 p-3 border-b bg-gray-50 rounded-t-lg">
-        <MessageCircle className="h-5 w-5 text-blue-600" />
-        <span className="font-medium">AI Energy Assistant</span>
-      </div>
-
-      <ScrollArea className="flex-1 p-3" ref={scrollAreaRef}>
-        <div className="space-y-3">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex items-start space-x-2 ${message.type === "user" ? "justify-end" : "justify-start"}`}
-            >
-              {message.type === "bot" && (
-                <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                  <Bot className="h-3 w-3 text-blue-600" />
-                </div>
-              )}
-              <div
-                className={`max-w-[80%] p-2 rounded-lg text-sm ${
-                  message.type === "user" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-900"
-                }`}
-              >
-                <div className="whitespace-pre-wrap">{message.content}</div>
-                <div className={`text-xs mt-1 ${message.type === "user" ? "text-blue-100" : "text-gray-500"}`}>
-                  {new Date(message.timestamp).toLocaleTimeString()}
-                </div>
+    <div className="fixed bottom-4 right-4 z-50">
+      <Card className="w-96 h-[500px] shadow-xl">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Bot className="h-5 w-5" />
+            Energy Assistant
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={clearChat} className="text-xs">
+              Clear
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <ScrollArea className="h-[380px] p-4">
+            {messages.length === 0 ? (
+              <div className="text-center text-gray-500 mt-8">
+                <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-sm">
+                  Hi! I'm your energy assistant. Ask me about your usage, bills, or energy-saving tips!
+                </p>
               </div>
-              {message.type === "user" && (
-                <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                  <User className="h-3 w-3 text-gray-600" />
-                </div>
-              )}
-            </div>
-          ))}
-          {isTyping && (
-            <div className="flex items-start space-x-2">
-              <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                <Bot className="h-3 w-3 text-blue-600" />
-              </div>
-              <div className="bg-gray-100 p-2 rounded-lg">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+            ) : (
+              <div className="space-y-4">
+                {messages.map((message) => (
                   <div
-                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.1s" }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.2s" }}
-                  ></div>
-                </div>
+                    key={message.id}
+                    className={`flex items-start gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    {message.role === "assistant" && (
+                      <div className="bg-blue-100 p-2 rounded-full">
+                        <Bot className="h-4 w-4 text-blue-600" />
+                      </div>
+                    )}
+                    <div
+                      className={`max-w-[80%] p-3 rounded-lg ${
+                        message.role === "user" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-900"
+                      }`}
+                    >
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      <p className="text-xs opacity-70 mt-1">{message.timestamp.toLocaleTimeString()}</p>
+                    </div>
+                    {message.role === "user" && (
+                      <div className="bg-blue-600 p-2 rounded-full">
+                        <User className="h-4 w-4 text-white" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {isLoading && (
+                  <div className="flex items-start gap-3">
+                    <div className="bg-blue-100 p-2 rounded-full">
+                      <Bot className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <div className="bg-gray-100 p-3 rounded-lg">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
               </div>
+            )}
+          </ScrollArea>
+          <div className="p-4 border-t">
+            <div className="flex gap-2">
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Ask about your energy usage..."
+                disabled={isLoading}
+                className="flex-1"
+              />
+              <Button onClick={handleSend} disabled={!input.trim() || isLoading} size="sm">
+                <Send className="h-4 w-4" />
+              </Button>
             </div>
-          )}
-        </div>
-      </ScrollArea>
-
-      <div className="p-3 border-t">
-        <div className="flex space-x-2">
-          <Input
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Ask me about energy saving tips..."
-            disabled={isTyping}
-          />
-          <Button onClick={handleSendMessage} disabled={!inputValue.trim() || isTyping}>
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
 
 // Named export for compatibility
-export { ChatBot as Chatbot }
+export { Chatbot as default }

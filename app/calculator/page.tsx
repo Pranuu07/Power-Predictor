@@ -1,274 +1,556 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Calculator, Zap, DollarSign, TrendingUp } from "lucide-react"
-import { saveBillCalculation, updateDashboardData } from "@/lib/localStorage"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Plus, Trash2, Calculator, Zap, TrendingUp, Save, AlertCircle } from "lucide-react"
+import { Navigation } from "@/components/navigation"
 import { ProtectedRoute } from "@/components/protected-route"
+import { getStoredData, saveStoredData } from "@/lib/localStorage"
 
-interface BillResult {
-  unitsConsumed: number
-  energyCharges: number
-  fixedCharges: number
-  taxes: number
-  totalBill: number
+interface Appliance {
+  id: string
+  name: string
+  wattage: number
+  hoursPerDay: number
+  daysPerMonth: number
+  monthlyCost: number
 }
 
+interface RateStructure {
+  name: string
+  baseRate: number
+  peakRate?: number
+  offPeakRate?: number
+  peakHours?: string
+  fixedCharge: number
+}
+
+const commonAppliances = [
+  { name: "LED Light Bulb", wattage: 10 },
+  { name: "Incandescent Bulb", wattage: 60 },
+  { name: "Ceiling Fan", wattage: 75 },
+  { name: "Desktop Computer", wattage: 300 },
+  { name: "Laptop", wattage: 65 },
+  { name: 'TV (LED 32")', wattage: 100 },
+  { name: 'TV (LED 55")', wattage: 150 },
+  { name: "Refrigerator", wattage: 400 },
+  { name: "Microwave", wattage: 1000 },
+  { name: "Washing Machine", wattage: 500 },
+  { name: "Dryer", wattage: 3000 },
+  { name: "Dishwasher", wattage: 1800 },
+  { name: "Air Conditioner (Window)", wattage: 1200 },
+  { name: "Air Conditioner (Central)", wattage: 3500 },
+  { name: "Space Heater", wattage: 1500 },
+  { name: "Water Heater", wattage: 4000 },
+]
+
+const rateStructures: RateStructure[] = [
+  {
+    name: "Flat Rate",
+    baseRate: 0.12,
+    fixedCharge: 10,
+  },
+  {
+    name: "Time of Use",
+    baseRate: 0.1,
+    peakRate: 0.18,
+    offPeakRate: 0.08,
+    peakHours: "4 PM - 9 PM",
+    fixedCharge: 15,
+  },
+  {
+    name: "Tiered Rate",
+    baseRate: 0.11,
+    peakRate: 0.15,
+    offPeakRate: 0.09,
+    peakHours: "Above 500 kWh",
+    fixedCharge: 12,
+  },
+]
+
 export default function CalculatorPage() {
-  const [previousReading, setPreviousReading] = useState("")
-  const [currentReading, setCurrentReading] = useState("")
-  const [result, setResult] = useState<BillResult | null>(null)
+  const [appliances, setAppliances] = useState<Appliance[]>([])
+  const [selectedRateStructure, setSelectedRateStructure] = useState<RateStructure>(rateStructures[0])
+  const [newAppliance, setNewAppliance] = useState({
+    name: "",
+    wattage: "",
+    hoursPerDay: "",
+    daysPerMonth: "30",
+  })
+  const [totalUsage, setTotalUsage] = useState(0)
+  const [totalCost, setTotalCost] = useState(0)
+  const [showResults, setShowResults] = useState(false)
+  const [savedMessage, setSavedMessage] = useState("")
   const [error, setError] = useState("")
-  const [isCalculating, setIsCalculating] = useState(false)
 
-  const calculateBill = () => {
+  useEffect(() => {
+    calculateBill()
+  }, [appliances, selectedRateStructure])
+
+  const addAppliance = () => {
+    if (!newAppliance.name || !newAppliance.wattage || !newAppliance.hoursPerDay) {
+      setError("Please fill in all appliance fields")
+      return
+    }
+
+    const wattage = Number.parseFloat(newAppliance.wattage)
+    const hoursPerDay = Number.parseFloat(newAppliance.hoursPerDay)
+    const daysPerMonth = Number.parseFloat(newAppliance.daysPerMonth)
+
+    if (wattage <= 0 || hoursPerDay <= 0 || daysPerMonth <= 0) {
+      setError("All values must be greater than 0")
+      return
+    }
+
+    if (hoursPerDay > 24) {
+      setError("Hours per day cannot exceed 24")
+      return
+    }
+
+    if (daysPerMonth > 31) {
+      setError("Days per month cannot exceed 31")
+      return
+    }
+
+    const monthlyUsage = (wattage * hoursPerDay * daysPerMonth) / 1000 // Convert to kWh
+    const monthlyCost = monthlyUsage * selectedRateStructure.baseRate
+
+    const appliance: Appliance = {
+      id: Date.now().toString(),
+      name: newAppliance.name,
+      wattage,
+      hoursPerDay,
+      daysPerMonth,
+      monthlyCost,
+    }
+
+    setAppliances([...appliances, appliance])
+    setNewAppliance({
+      name: "",
+      wattage: "",
+      hoursPerDay: "",
+      daysPerMonth: "30",
+    })
     setError("")
-    setIsCalculating(true)
-
-    const prev = Number.parseFloat(previousReading)
-    const curr = Number.parseFloat(currentReading)
-
-    if (isNaN(prev) || isNaN(curr)) {
-      setError("Please enter valid meter readings")
-      setIsCalculating(false)
-      return
-    }
-
-    if (curr <= prev) {
-      setError("Current reading must be greater than previous reading")
-      setIsCalculating(false)
-      return
-    }
-
-    const unitsConsumed = curr - prev
-
-    // Tiered pricing structure (example rates)
-    let energyCharges = 0
-    if (unitsConsumed <= 100) {
-      energyCharges = unitsConsumed * 3.5
-    } else if (unitsConsumed <= 200) {
-      energyCharges = 100 * 3.5 + (unitsConsumed - 100) * 4.5
-    } else if (unitsConsumed <= 300) {
-      energyCharges = 100 * 3.5 + 100 * 4.5 + (unitsConsumed - 200) * 6.0
-    } else {
-      energyCharges = 100 * 3.5 + 100 * 4.5 + 100 * 6.0 + (unitsConsumed - 300) * 7.5
-    }
-
-    const fixedCharges = 50 // Fixed monthly charge
-    const taxes = (energyCharges + fixedCharges) * 0.18 // 18% tax
-    const totalBill = energyCharges + fixedCharges + taxes
-
-    const billResult: BillResult = {
-      unitsConsumed,
-      energyCharges,
-      fixedCharges,
-      taxes,
-      totalBill,
-    }
-
-    setResult(billResult)
-
-    // Save to localStorage
-    saveBillCalculation({
-      previousReading: prev,
-      currentReading: curr,
-      unitsConsumed,
-      energyCharges,
-      fixedCharges,
-      taxes,
-      totalBill,
-    })
-
-    // Update dashboard data
-    updateDashboardData({
-      currentUsage: unitsConsumed,
-      currentBill: totalBill,
-      savingsPotential: Math.max(0, totalBill * 0.15), // 15% potential savings
-      aiPrediction: unitsConsumed * 1.1, // 10% increase prediction
-    })
-
-    setIsCalculating(false)
   }
 
-  const resetForm = () => {
-    setPreviousReading("")
-    setCurrentReading("")
-    setResult(null)
-    setError("")
+  const removeAppliance = (id: string) => {
+    setAppliances(appliances.filter((app) => app.id !== id))
+  }
+
+  const addCommonAppliance = (commonApp: { name: string; wattage: number }) => {
+    setNewAppliance({
+      ...newAppliance,
+      name: commonApp.name,
+      wattage: commonApp.wattage.toString(),
+    })
+  }
+
+  const calculateBill = () => {
+    if (appliances.length === 0) {
+      setTotalUsage(0)
+      setTotalCost(0)
+      setShowResults(false)
+      return
+    }
+
+    let usage = 0
+    let cost = 0
+
+    appliances.forEach((appliance) => {
+      const monthlyUsage = (appliance.wattage * appliance.hoursPerDay * appliance.daysPerMonth) / 1000
+      usage += monthlyUsage
+
+      // Calculate cost based on rate structure
+      let applianceCost = 0
+      if (selectedRateStructure.name === "Time of Use") {
+        // Assume 30% peak hours, 70% off-peak
+        const peakUsage = monthlyUsage * 0.3
+        const offPeakUsage = monthlyUsage * 0.7
+        applianceCost =
+          peakUsage * (selectedRateStructure.peakRate || selectedRateStructure.baseRate) +
+          offPeakUsage * (selectedRateStructure.offPeakRate || selectedRateStructure.baseRate)
+      } else if (selectedRateStructure.name === "Tiered Rate") {
+        // Simple tiered calculation
+        if (usage <= 500) {
+          applianceCost = monthlyUsage * selectedRateStructure.baseRate
+        } else {
+          const baseUsage = Math.min(monthlyUsage, 500)
+          const tierUsage = monthlyUsage - baseUsage
+          applianceCost =
+            baseUsage * selectedRateStructure.baseRate +
+            tierUsage * (selectedRateStructure.peakRate || selectedRateStructure.baseRate)
+        }
+      } else {
+        applianceCost = monthlyUsage * selectedRateStructure.baseRate
+      }
+
+      cost += applianceCost
+    })
+
+    // Add fixed charge
+    cost += selectedRateStructure.fixedCharge
+
+    setTotalUsage(usage)
+    setTotalCost(cost)
+    setShowResults(true)
+  }
+
+  const saveBillCalculation = () => {
+    if (appliances.length === 0) {
+      setError("Add at least one appliance before saving")
+      return
+    }
+
+    const calculation = {
+      id: Date.now().toString(),
+      date: new Date().toISOString(),
+      totalUsage,
+      totalCost,
+      appliances: appliances.map((app) => ({
+        name: app.name,
+        wattage: app.wattage,
+        hoursPerDay: app.hoursPerDay,
+        daysPerMonth: app.daysPerMonth,
+        monthlyCost: ((app.wattage * app.hoursPerDay * app.daysPerMonth) / 1000) * selectedRateStructure.baseRate,
+      })),
+      rateStructure: selectedRateStructure.name,
+      notes: `Calculated with ${appliances.length} appliances`,
+    }
+
+    const data = getStoredData()
+    const billCalculations = data.billCalculations || []
+    billCalculations.push(calculation)
+
+    saveStoredData({ ...data, billCalculations })
+    setSavedMessage("Bill calculation saved successfully!")
+    setTimeout(() => setSavedMessage(""), 3000)
   }
 
   return (
     <ProtectedRoute>
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Bill Calculator</h1>
-          <p className="text-gray-600 mt-2">Calculate your electricity bill based on meter readings</p>
-        </div>
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Calculator Form */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calculator className="h-5 w-5" />
-                Calculate Your Bill
-              </CardTitle>
-              <CardDescription>
-                Enter your previous and current meter readings to calculate your electricity bill
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">Bill Calculator</h1>
+            <p className="text-gray-600 mt-2">
+              Calculate your electricity bill by adding your appliances and their usage patterns.
+            </p>
+          </div>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="previous">Previous Meter Reading (kWh)</Label>
-                  <Input
-                    id="previous"
-                    type="number"
-                    value={previousReading}
-                    onChange={(e) => setPreviousReading(e.target.value)}
-                    placeholder="Enter previous reading"
-                    min="0"
-                    step="0.1"
-                  />
-                </div>
+          {error && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="current">Current Meter Reading (kWh)</Label>
-                  <Input
-                    id="current"
-                    type="number"
-                    value={currentReading}
-                    onChange={(e) => setCurrentReading(e.target.value)}
-                    placeholder="Enter current reading"
-                    min="0"
-                    step="0.1"
-                  />
-                </div>
-              </div>
+          {savedMessage && (
+            <Alert className="mb-6 border-green-200 bg-green-50">
+              <Save className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-800">{savedMessage}</AlertDescription>
+            </Alert>
+          )}
 
-              <div className="flex gap-3">
-                <Button
-                  onClick={calculateBill}
-                  disabled={isCalculating || !previousReading || !currentReading}
-                  className="flex-1"
-                >
-                  {isCalculating ? "Calculating..." : "Calculate Bill"}
-                </Button>
-                <Button variant="outline" onClick={resetForm}>
-                  Reset
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Input Section */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Rate Structure Selection */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Rate Structure</CardTitle>
+                  <CardDescription>
+                    Select your electricity rate structure to get accurate calculations.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {rateStructures.map((rate) => (
+                      <Card
+                        key={rate.name}
+                        className={`cursor-pointer transition-colors ${
+                          selectedRateStructure.name === rate.name ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"
+                        }`}
+                        onClick={() => setSelectedRateStructure(rate)}
+                      >
+                        <CardContent className="p-4">
+                          <h3 className="font-medium mb-2">{rate.name}</h3>
+                          <div className="text-sm text-gray-600 space-y-1">
+                            <div>Base: ${rate.baseRate}/kWh</div>
+                            {rate.peakRate && <div>Peak: ${rate.peakRate}/kWh</div>}
+                            {rate.offPeakRate && <div>Off-peak: ${rate.offPeakRate}/kWh</div>}
+                            <div>Fixed: ${rate.fixedCharge}/month</div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
 
-          {/* Results */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Bill Breakdown
-              </CardTitle>
-              <CardDescription>
-                {result ? "Your calculated electricity bill" : "Results will appear here after calculation"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {result ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Zap className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm font-medium text-blue-600">Units Consumed</span>
+              {/* Add Appliances */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Add Appliances</CardTitle>
+                  <CardDescription>Add your electrical appliances and specify their usage patterns.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Tabs defaultValue="manual" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="manual">Manual Entry</TabsTrigger>
+                      <TabsTrigger value="common">Common Appliances</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="manual" className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="applianceName">Appliance Name</Label>
+                          <Input
+                            id="applianceName"
+                            value={newAppliance.name}
+                            onChange={(e) => setNewAppliance({ ...newAppliance, name: e.target.value })}
+                            placeholder="e.g., LED Light Bulb"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="wattage">Wattage (W)</Label>
+                          <Input
+                            id="wattage"
+                            type="number"
+                            value={newAppliance.wattage}
+                            onChange={(e) => setNewAppliance({ ...newAppliance, wattage: e.target.value })}
+                            placeholder="e.g., 60"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="hoursPerDay">Hours per Day</Label>
+                          <Input
+                            id="hoursPerDay"
+                            type="number"
+                            step="0.5"
+                            max="24"
+                            value={newAppliance.hoursPerDay}
+                            onChange={(e) => setNewAppliance({ ...newAppliance, hoursPerDay: e.target.value })}
+                            placeholder="e.g., 8"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="daysPerMonth">Days per Month</Label>
+                          <Input
+                            id="daysPerMonth"
+                            type="number"
+                            max="31"
+                            value={newAppliance.daysPerMonth}
+                            onChange={(e) => setNewAppliance({ ...newAppliance, daysPerMonth: e.target.value })}
+                            placeholder="e.g., 30"
+                          />
+                        </div>
                       </div>
-                      <div className="text-2xl font-bold text-blue-700">{result.unitsConsumed.toFixed(1)} kWh</div>
-                    </div>
 
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <DollarSign className="h-4 w-4 text-green-600" />
-                        <span className="text-sm font-medium text-green-600">Total Bill</span>
+                      <Button onClick={addAppliance} className="w-full">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Appliance
+                      </Button>
+                    </TabsContent>
+
+                    <TabsContent value="common" className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {commonAppliances.map((appliance) => (
+                          <Button
+                            key={appliance.name}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addCommonAppliance(appliance)}
+                            className="justify-start text-left h-auto p-3"
+                          >
+                            <div>
+                              <div className="font-medium">{appliance.name}</div>
+                              <div className="text-xs text-gray-500">{appliance.wattage}W</div>
+                            </div>
+                          </Button>
+                        ))}
                       </div>
-                      <div className="text-2xl font-bold text-green-700">₹{result.totalBill.toFixed(2)}</div>
-                    </div>
-                  </div>
+                      <p className="text-sm text-gray-600">
+                        Click on an appliance to auto-fill the form, then adjust usage hours as needed.
+                      </p>
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
 
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center py-2 border-b">
-                      <span className="text-gray-600">Energy Charges</span>
-                      <span className="font-medium">₹{result.energyCharges.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b">
-                      <span className="text-gray-600">Fixed Charges</span>
-                      <span className="font-medium">₹{result.fixedCharges.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b">
-                      <span className="text-gray-600">Taxes (18%)</span>
-                      <span className="font-medium">₹{result.taxes.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-3 bg-gray-50 px-4 rounded-lg">
-                      <span className="font-semibold text-lg">Total Amount</span>
-                      <span className="font-bold text-xl text-green-600">₹{result.totalBill.toFixed(2)}</span>
-                    </div>
-                  </div>
+              {/* Current Appliances */}
+              {appliances.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Your Appliances</CardTitle>
+                    <CardDescription>Review and manage your added appliances.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {appliances.map((appliance) => {
+                        const monthlyUsage = (appliance.wattage * appliance.hoursPerDay * appliance.daysPerMonth) / 1000
+                        const monthlyCost = monthlyUsage * selectedRateStructure.baseRate
 
-                  <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                    <h4 className="font-medium text-blue-900 mb-2">Rate Structure</h4>
-                    <div className="text-sm text-blue-700 space-y-1">
-                      <div>0-100 kWh: ₹3.50 per unit</div>
-                      <div>101-200 kWh: ₹4.50 per unit</div>
-                      <div>201-300 kWh: ₹6.00 per unit</div>
-                      <div>Above 300 kWh: ₹7.50 per unit</div>
+                        return (
+                          <div
+                            key={appliance.id}
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2">
+                                <h4 className="font-medium">{appliance.name}</h4>
+                                <Badge variant="outline">{appliance.wattage}W</Badge>
+                              </div>
+                              <div className="text-sm text-gray-600 mt-1">
+                                {appliance.hoursPerDay}h/day × {appliance.daysPerMonth} days = {monthlyUsage.toFixed(1)}{" "}
+                                kWh/month
+                              </div>
+                              <div className="text-sm font-medium text-green-600">${monthlyCost.toFixed(2)}/month</div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeAppliance(appliance.id)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )
+                      })}
                     </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <TrendingUp className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500">Enter your meter readings to calculate your bill</p>
-                </div>
+                  </CardContent>
+                </Card>
               )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Tips Section */}
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>How to Read Your Meter</CardTitle>
-            <CardDescription>Tips for accurate meter reading</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-medium mb-2">Digital Meters</h4>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• Read the numbers from left to right</li>
-                  <li>• Include decimal places if shown</li>
-                  <li>• Note the reading at the same time each month</li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">Analog Meters</h4>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• Read dials from left to right</li>
-                  <li>• If pointer is between numbers, use the lower number</li>
-                  <li>• Double-check by reading again</li>
-                </ul>
-              </div>
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Results Section */}
+            <div className="space-y-6">
+              {showResults && (
+                <>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center space-x-2">
+                        <Calculator className="h-5 w-5" />
+                        <span>Bill Summary</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-blue-600">${totalCost.toFixed(2)}</div>
+                        <p className="text-gray-600">Estimated Monthly Bill</p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Total Usage:</span>
+                          <span className="font-medium">{totalUsage.toFixed(1)} kWh</span>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Energy Cost:</span>
+                          <span className="font-medium">
+                            ${(totalCost - selectedRateStructure.fixedCharge).toFixed(2)}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Fixed Charge:</span>
+                          <span className="font-medium">${selectedRateStructure.fixedCharge.toFixed(2)}</span>
+                        </div>
+
+                        <div className="flex justify-between items-center border-t pt-2">
+                          <span className="text-sm text-gray-600">Rate Structure:</span>
+                          <Badge variant="outline">{selectedRateStructure.name}</Badge>
+                        </div>
+                      </div>
+
+                      <Button onClick={saveBillCalculation} className="w-full">
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Calculation
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center space-x-2">
+                        <TrendingUp className="h-5 w-5" />
+                        <span>Usage Insights</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="text-sm">
+                        <div className="flex justify-between mb-2">
+                          <span>Daily Average:</span>
+                          <span className="font-medium">{(totalUsage / 30).toFixed(1)} kWh</span>
+                        </div>
+
+                        <div className="flex justify-between mb-2">
+                          <span>Cost per kWh:</span>
+                          <span className="font-medium">
+                            ${((totalCost - selectedRateStructure.fixedCharge) / totalUsage).toFixed(3)}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between mb-2">
+                          <span>vs. US Average:</span>
+                          <span className={`font-medium ${totalUsage > 877 ? "text-red-600" : "text-green-600"}`}>
+                            {totalUsage > 877 ? "Above" : "Below"} ({((totalUsage / 877) * 100).toFixed(0)}%)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t">
+                        <h4 className="font-medium mb-2">Top Energy Users:</h4>
+                        <div className="space-y-1">
+                          {appliances
+                            .sort((a, b) => {
+                              const aUsage = (a.wattage * a.hoursPerDay * a.daysPerMonth) / 1000
+                              const bUsage = (b.wattage * b.hoursPerDay * b.daysPerMonth) / 1000
+                              return bUsage - aUsage
+                            })
+                            .slice(0, 3)
+                            .map((appliance) => {
+                              const usage = (appliance.wattage * appliance.hoursPerDay * appliance.daysPerMonth) / 1000
+                              const percentage = (usage / totalUsage) * 100
+                              return (
+                                <div key={appliance.id} className="flex justify-between text-sm">
+                                  <span className="truncate">{appliance.name}</span>
+                                  <span className="font-medium">{percentage.toFixed(0)}%</span>
+                                </div>
+                              )
+                            })}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+
+              {!showResults && appliances.length === 0 && (
+                <Card>
+                  <CardContent className="text-center py-12">
+                    <Zap className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Start Calculating</h3>
+                    <p className="text-gray-600 mb-4">Add your appliances to see your estimated electricity bill.</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </ProtectedRoute>
   )
