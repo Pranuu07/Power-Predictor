@@ -24,7 +24,6 @@ import {
 } from "lucide-react"
 import { Navigation } from "@/components/navigation"
 import { ProtectedRoute } from "@/components/protected-route"
-import { getStoredData, saveStoredData } from "@/lib/localStorage"
 
 interface Tip {
   id: string
@@ -208,14 +207,17 @@ export default function TipsPage() {
 
   useEffect(() => {
     // Load completed tips from localStorage
-    const data = getStoredData()
-    if (data.completedTips) {
-      const updatedTips = energyTips.map((tip) => ({
-        ...tip,
-        completed: data.completedTips.includes(tip.id),
-      }))
-      setTips(updatedTips)
-      setFilteredTips(updatedTips)
+    if (typeof window !== "undefined") {
+      const completedTips = localStorage.getItem("powertracker_completed_tips")
+      if (completedTips) {
+        const completedIds = JSON.parse(completedTips)
+        const updatedTips = energyTips.map((tip) => ({
+          ...tip,
+          completed: completedIds.includes(tip.id),
+        }))
+        setTips(updatedTips)
+        setFilteredTips(updatedTips)
+      }
     }
   }, [])
 
@@ -250,9 +252,10 @@ export default function TipsPage() {
     setTips(updatedTips)
 
     // Save to localStorage
-    const data = getStoredData()
-    const completedTips = updatedTips.filter((tip) => tip.completed).map((tip) => tip.id)
-    saveStoredData({ ...data, completedTips })
+    if (typeof window !== "undefined") {
+      const completedTips = updatedTips.filter((tip) => tip.completed).map((tip) => tip.id)
+      localStorage.setItem("powertracker_completed_tips", JSON.stringify(completedTips))
+    }
   }
 
   const getDifficultyColor = (difficulty: string) => {
