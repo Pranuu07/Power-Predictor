@@ -2,13 +2,26 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Navigation } from "@/components/navigation"
 import { UsageChart } from "@/components/usage-chart"
 import { CostChart } from "@/components/cost-chart"
 import { UsageBreakdown } from "@/components/usage-breakdown"
 import { ChatBot } from "@/components/chatbot"
-import { Zap, TrendingUp, DollarSign, Brain } from "lucide-react"
-import { getDashboardData } from "@/lib/localStorage"
+import { Zap, TrendingUp, DollarSign, Brain, RefreshCw, History } from "lucide-react"
+import { getDashboardData, clearAllData } from "@/lib/localStorage"
+import { useRouter } from "next/navigation"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 interface DashboardData {
   currentUsage: number
@@ -22,6 +35,8 @@ interface DashboardData {
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isResetting, setIsResetting] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     // Load data from localStorage
@@ -36,8 +51,6 @@ export default function Dashboard() {
     }
 
     window.addEventListener("storage", handleStorageChange)
-
-    // Custom event for same-tab updates
     window.addEventListener("dashboardUpdate", handleStorageChange)
 
     return () => {
@@ -45,6 +58,22 @@ export default function Dashboard() {
       window.removeEventListener("dashboardUpdate", handleStorageChange)
     }
   }, [])
+
+  const handleReset = async () => {
+    setIsResetting(true)
+    clearAllData()
+
+    // Small delay to show loading state
+    setTimeout(() => {
+      const resetData = getDashboardData()
+      setData(resetData)
+      setIsResetting(false)
+    }, 500)
+  }
+
+  const handleViewHistory = () => {
+    router.push("/history")
+  }
 
   if (loading) {
     return (
@@ -76,13 +105,46 @@ export default function Dashboard() {
       <Navigation />
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Energy Dashboard</h1>
-          <p className="text-gray-600">
-            {data.currentUsage === 0
-              ? "Start tracking your power consumption with the Bill Calculator"
-              : "Monitor your power consumption and optimize energy usage"}
-          </p>
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Energy Dashboard</h1>
+            <p className="text-gray-600">
+              {data.currentUsage === 0
+                ? "Start tracking your power consumption with the Bill Calculator"
+                : "Monitor your power consumption and optimize energy usage"}
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <Button onClick={handleViewHistory} variant="outline" className="flex items-center gap-2 bg-transparent">
+              <History className="h-4 w-4" />
+              View History
+            </Button>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" className="flex items-center gap-2" disabled={isResetting}>
+                  <RefreshCw className={`h-4 w-4 ${isResetting ? "animate-spin" : ""}`} />
+                  {isResetting ? "Resetting..." : "Reset Data"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Reset All Data</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete all your energy data, bill calculations, chat history, and predictions.
+                    This action cannot be undone. Are you sure you want to continue?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleReset} className="bg-red-600 hover:bg-red-700">
+                    Yes, Reset Everything
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </div>
 
         {/* Stats Cards */}

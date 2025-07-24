@@ -91,6 +91,9 @@ export const saveDashboardData = (data: Partial<DashboardData>): void => {
   const current = getDashboardData()
   const updated = { ...current, ...data, lastUpdated: new Date().toISOString() }
   localStorage.setItem("powertracker_dashboard", JSON.stringify(updated))
+
+  // Trigger custom event for real-time updates
+  window.dispatchEvent(new CustomEvent("dashboardUpdate"))
 }
 
 // Bill calculations functions
@@ -121,6 +124,7 @@ export const saveBillCalculation = (calculation: Omit<BillCalculation, "id" | "t
   })
 
   updateMonthlyHistory(calculation.unitsConsumed, calculation.totalBill)
+  generatePredictions(getDashboardData())
 
   return newBill
 }
@@ -401,12 +405,40 @@ function generatePersonalizedTips(usage: number): EnergyTip[] {
   return baseTips
 }
 
-// Clear all data function
+// Clear all data function (RESET FUNCTIONALITY)
 export const clearAllData = (): void => {
   if (typeof window === "undefined") return
 
+  // Clear all localStorage data
   localStorage.removeItem("powertracker_dashboard")
   localStorage.removeItem("powertracker_bills")
   localStorage.removeItem("powertracker_chat")
   localStorage.removeItem("powertracker_predictions")
+
+  // Reset to initial state
+  localStorage.setItem("powertracker_dashboard", JSON.stringify(initialDashboardData))
+
+  // Trigger update event
+  window.dispatchEvent(new CustomEvent("dashboardUpdate"))
+}
+
+// Delete specific bill calculation
+export const deleteBillCalculation = (billId: string): void => {
+  if (typeof window === "undefined") return
+
+  const bills = getBillCalculations().filter((bill) => bill.id !== billId)
+  localStorage.setItem("powertracker_bills", JSON.stringify(bills))
+
+  // Recalculate dashboard data based on remaining bills
+  if (bills.length > 0) {
+    const latestBill = bills[bills.length - 1]
+    saveDashboardData({
+      currentUsage: latestBill.unitsConsumed,
+      currentBill: latestBill.totalBill,
+    })
+    updateMonthlyHistory(latestBill.unitsConsumed, latestBill.totalBill)
+  } else {
+    // Reset to initial state if no bills remain
+    saveDashboardData(initialDashboardData)
+  }
 }

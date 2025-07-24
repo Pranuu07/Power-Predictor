@@ -1,83 +1,85 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Navigation } from "@/components/navigation"
-import { Calculator, Zap, DollarSign } from "lucide-react"
-import { saveBillCalculation, generatePredictions, getDashboardData, updateMonthlyHistory } from "@/lib/localStorage"
-
-interface BillResult {
-  previousReading: number
-  currentReading: number
-  unitsConsumed: number
-  energyCharges: number
-  fixedCharges: number
-  taxes: number
-  totalBill: number
-  slabBreakdown: Array<{ range: string; rate: number; amount: number }>
-}
+import { Calculator, Zap, DollarSign, FileText, CheckCircle } from "lucide-react"
+import { saveBillCalculation } from "@/lib/localStorage"
+import { useRouter } from "next/navigation"
 
 export default function BillCalculator() {
   const [previousReading, setPreviousReading] = useState("")
   const [currentReading, setCurrentReading] = useState("")
-  const [result, setResult] = useState<BillResult | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<any>(null)
+  const [isCalculating, setIsCalculating] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const router = useRouter()
 
-  const calculateBill = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+  const calculateBill = () => {
+    const prev = Number.parseFloat(previousReading)
+    const current = Number.parseFloat(currentReading)
 
-    try {
-      const response = await fetch("/api/calculate-bill", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          previousReading: Number.parseFloat(previousReading),
-          currentReading: Number.parseFloat(currentReading),
-        }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setResult(data)
-
-        // Save to local storage and update history
-        saveBillCalculation({
-          previousReading: data.previousReading,
-          currentReading: data.currentReading,
-          unitsConsumed: data.unitsConsumed,
-          energyCharges: data.energyCharges,
-          fixedCharges: data.fixedCharges,
-          taxes: data.taxes,
-          totalBill: data.totalBill,
-        })
-
-        // Update monthly history
-        updateMonthlyHistory(data.unitsConsumed, data.totalBill)
-
-        // Update predictions with new data
-        const dashboardData = getDashboardData()
-        generatePredictions(dashboardData)
-
-        // Trigger dashboard update
-        window.dispatchEvent(new Event("dashboardUpdate"))
-      } else {
-        const errorData = await response.json()
-        alert(errorData.message || "Failed to calculate bill")
-      }
-    } catch (error) {
-      console.error("Calculation failed:", error)
-      alert("Failed to calculate bill. Please try again.")
-    } finally {
-      setLoading(false)
+    if (isNaN(prev) || isNaN(current) || current <= prev) {
+      alert("Please enter valid meter readings. Current reading must be greater than previous reading.")
+      return
     }
+
+    setIsCalculating(true)
+
+    // Simulate calculation delay
+    setTimeout(() => {
+      const unitsConsumed = current - prev
+
+      // Indian electricity tariff calculation (simplified)
+      let energyCharges = 0
+      if (unitsConsumed <= 100) {
+        energyCharges = unitsConsumed * 3.5
+      } else if (unitsConsumed <= 200) {
+        energyCharges = 100 * 3.5 + (unitsConsumed - 100) * 4.5
+      } else if (unitsConsumed <= 300) {
+        energyCharges = 100 * 3.5 + 100 * 4.5 + (unitsConsumed - 200) * 6.0
+      } else {
+        energyCharges = 100 * 3.5 + 100 * 4.5 + 100 * 6.0 + (unitsConsumed - 300) * 7.5
+      }
+
+      const fixedCharges = 50 // Fixed monthly charge
+      const taxes = Math.round((energyCharges + fixedCharges) * 0.18) // 18% GST
+      const totalBill = Math.round(energyCharges + fixedCharges + taxes)
+
+      const calculation = {
+        previousReading: prev,
+        currentReading: current,
+        unitsConsumed,
+        energyCharges: Math.round(energyCharges),
+        fixedCharges,
+        taxes,
+        totalBill,
+      }
+
+      // Save to localStorage
+      saveBillCalculation(calculation)
+
+      setResult(calculation)
+      setIsCalculating(false)
+      setShowSuccess(true)
+
+      // Hide success message after 3 seconds
+      setTimeout(() => setShowSuccess(false), 3000)
+    }, 1000)
+  }
+
+  const handleReset = () => {
+    setPreviousReading("")
+    setCurrentReading("")
+    setResult(null)
+    setShowSuccess(false)
+  }
+
+  const handleViewDashboard = () => {
+    router.push("/dashboard")
   }
 
   return (
@@ -86,54 +88,57 @@ export default function BillCalculator() {
 
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Bill Calculator</h1>
-          <p className="text-gray-600">Enter your meter readings to calculate your electricity bill</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+            <Calculator className="h-8 w-8" />
+            Bill Calculator
+          </h1>
+          <p className="text-gray-600">Calculate your electricity bill based on meter readings</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Calculator Form */}
+          {/* Input Form */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Calculator className="h-5 w-5" />
-                Calculate Your Bill
+                <FileText className="h-5 w-5" />
+                Enter Meter Readings
               </CardTitle>
               <CardDescription>
-                Enter your previous and current meter readings to get an accurate bill calculation
+                Enter your previous and current electricity meter readings to calculate your bill
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={calculateBill} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="previous">Previous Reading (kWh)</Label>
-                  <Input
-                    id="previous"
-                    type="number"
-                    value={previousReading}
-                    onChange={(e) => setPreviousReading(e.target.value)}
-                    placeholder="Enter previous meter reading"
-                    required
-                    min="0"
-                    step="0.1"
-                  />
-                </div>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="previous">Previous Reading (kWh)</Label>
+                <Input
+                  id="previous"
+                  type="number"
+                  placeholder="Enter previous meter reading"
+                  value={previousReading}
+                  onChange={(e) => setPreviousReading(e.target.value)}
+                  disabled={isCalculating}
+                />
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="current">Current Reading (kWh)</Label>
-                  <Input
-                    id="current"
-                    type="number"
-                    value={currentReading}
-                    onChange={(e) => setCurrentReading(e.target.value)}
-                    placeholder="Enter current meter reading"
-                    required
-                    min="0"
-                    step="0.1"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="current">Current Reading (kWh)</Label>
+                <Input
+                  id="current"
+                  type="number"
+                  placeholder="Enter current meter reading"
+                  value={currentReading}
+                  onChange={(e) => setCurrentReading(e.target.value)}
+                  disabled={isCalculating}
+                />
+              </div>
 
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? (
+              <div className="flex gap-3">
+                <Button
+                  onClick={calculateBill}
+                  disabled={!previousReading || !currentReading || isCalculating}
+                  className="flex-1"
+                >
+                  {isCalculating ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                       Calculating...
@@ -145,140 +150,144 @@ export default function BillCalculator() {
                     </>
                   )}
                 </Button>
-              </form>
+
+                <Button onClick={handleReset} variant="outline">
+                  Reset
+                </Button>
+              </div>
+
+              {showSuccess && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <span className="text-green-800 font-medium">Bill calculated and saved successfully!</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {/* Results */}
-          {result && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
-                  Bill Calculation Result
-                </CardTitle>
-                <CardDescription>Your electricity bill breakdown</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Summary */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center p-4 bg-blue-50 rounded-lg">
-                    <Zap className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                    <p className="text-sm text-gray-600">Units Consumed</p>
-                    <p className="text-2xl font-bold text-blue-600">{result.unitsConsumed}</p>
-                    <p className="text-xs text-gray-500">kWh</p>
-                  </div>
-
-                  <div className="text-center p-4 bg-green-50 rounded-lg">
-                    <DollarSign className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                    <p className="text-sm text-gray-600">Total Bill</p>
-                    <p className="text-2xl font-bold text-green-600">₹{result.totalBill}</p>
-                    <p className="text-xs text-gray-500">Including all charges</p>
-                  </div>
-                </div>
-
-                {/* Detailed Breakdown */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Bill Calculation Result
+              </CardTitle>
+              <CardDescription>
+                {result ? "Your electricity bill breakdown" : "Results will appear here after calculation"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {result ? (
                 <div className="space-y-4">
-                  <h4 className="font-semibold text-gray-900">Bill Breakdown</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Zap className="h-4 w-4 text-blue-600" />
+                        <span className="text-sm font-medium text-blue-800">Units Consumed</span>
+                      </div>
+                      <div className="text-2xl font-bold text-blue-900">{result.unitsConsumed} kWh</div>
+                    </div>
 
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Energy Charges</span>
-                      <span className="font-medium">₹{result.energyCharges.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Fixed Charges</span>
-                      <span className="font-medium">₹{result.fixedCharges}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Taxes (10%)</span>
-                      <span className="font-medium">₹{result.taxes.toFixed(2)}</span>
-                    </div>
-                    <hr className="my-2" />
-                    <div className="flex justify-between text-lg font-bold">
-                      <span>Total Amount</span>
-                      <span className="text-green-600">₹{result.totalBill}</span>
+                    <div className="p-3 bg-green-50 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <DollarSign className="h-4 w-4 text-green-600" />
+                        <span className="text-sm font-medium text-green-800">Total Bill</span>
+                      </div>
+                      <div className="text-2xl font-bold text-green-900">₹{result.totalBill}</div>
                     </div>
                   </div>
 
-                  {/* Slab Breakdown */}
-                  {result.slabBreakdown && result.slabBreakdown.length > 0 && (
+                  <div className="space-y-3 pt-4 border-t">
+                    <h4 className="font-semibold text-gray-900">Bill Breakdown:</h4>
+
                     <div className="space-y-2">
-                      <h4 className="font-semibold text-gray-900">Slab-wise Charges</h4>
-                      {result.slabBreakdown.map((slab, index) => (
-                        <div key={index} className="flex justify-between text-sm">
-                          <span className="text-gray-600">
-                            {slab.range} @ ₹{slab.rate}/unit
-                          </span>
-                          <span className="font-medium">₹{slab.amount.toFixed(2)}</span>
-                        </div>
-                      ))}
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Previous Reading:</span>
+                        <span className="font-medium">{result.previousReading} kWh</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Current Reading:</span>
+                        <span className="font-medium">{result.currentReading} kWh</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Energy Charges:</span>
+                        <span className="font-medium">₹{result.energyCharges}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Fixed Charges:</span>
+                        <span className="font-medium">₹{result.fixedCharges}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Taxes (18% GST):</span>
+                        <span className="font-medium">₹{result.taxes}</span>
+                      </div>
+                      <div className="flex justify-between pt-2 border-t font-semibold">
+                        <span>Total Amount:</span>
+                        <span className="text-green-600">₹{result.totalBill}</span>
+                      </div>
                     </div>
-                  )}
-                </div>
+                  </div>
 
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-sm text-yellow-800">
-                    <strong>Note:</strong> This calculation is based on standard tariff rates. Actual rates may vary by
-                    state and electricity board.
-                  </p>
+                  <Button onClick={handleViewDashboard} className="w-full mt-4">
+                    View Updated Dashboard
+                  </Button>
                 </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Instructions */}
-          {!result && (
-            <Card>
-              <CardHeader>
-                <CardTitle>How to Use</CardTitle>
-                <CardDescription>Follow these steps to calculate your electricity bill</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-start space-x-3">
-                  <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold">
-                    1
-                  </div>
-                  <div>
-                    <h4 className="font-medium">Find Your Meter Reading</h4>
-                    <p className="text-sm text-gray-600">
-                      Check your electricity meter and note down the current reading in kWh
-                    </p>
-                  </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Calculator className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">Enter your meter readings and click calculate to see your bill</p>
                 </div>
-
-                <div className="flex items-start space-x-3">
-                  <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold">
-                    2
-                  </div>
-                  <div>
-                    <h4 className="font-medium">Enter Previous Reading</h4>
-                    <p className="text-sm text-gray-600">Input the meter reading from your last electricity bill</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-3">
-                  <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold">
-                    3
-                  </div>
-                  <div>
-                    <h4 className="font-medium">Calculate Bill</h4>
-                    <p className="text-sm text-gray-600">
-                      Click calculate to get your detailed bill breakdown with slab-wise charges
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-800">
-                    <strong>Tip:</strong> Regular tracking helps you monitor your energy consumption patterns and
-                    identify opportunities to save money.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </CardContent>
+          </Card>
         </div>
+
+        {/* How it works */}
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>How the Calculation Works</CardTitle>
+            <CardDescription>Understanding your electricity bill calculation</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-semibold mb-3">Tariff Slabs (per kWh):</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>0-100 units:</span>
+                    <span className="font-medium">₹3.50</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>101-200 units:</span>
+                    <span className="font-medium">₹4.50</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>201-300 units:</span>
+                    <span className="font-medium">₹6.00</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Above 300 units:</span>
+                    <span className="font-medium">₹7.50</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold mb-3">Additional Charges:</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Fixed Charges:</span>
+                    <span className="font-medium">₹50/month</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>GST:</span>
+                    <span className="font-medium">18%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </main>
     </div>
   )

@@ -4,49 +4,30 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Navigation } from "@/components/navigation"
 import { Progress } from "@/components/ui/progress"
-import { Brain, TrendingUp, TrendingDown, Minus, Lightbulb, AlertTriangle } from "lucide-react"
-import { generatePredictions, getDashboardData, getBillCalculations } from "@/lib/localStorage"
+import { TrendingUp, TrendingDown, Minus, Brain, Lightbulb, Target, AlertTriangle } from "lucide-react"
+import { generatePredictions, getDashboardData, type Prediction } from "@/lib/localStorage"
 
-interface Prediction {
-  nextMonthUsage: number
-  nextMonthCost: number
-  efficiencyScore: number
-  trend: string
-  confidence: number
-  recommendations: string[]
-  lastUpdated: string
-}
-
-export default function Predictions() {
+export default function PredictionsPage() {
   const [predictions, setPredictions] = useState<Prediction | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadPredictions()
+    // Load predictions from localStorage
+    const dashboardData = getDashboardData()
+    const predictionData = generatePredictions(dashboardData)
+    setPredictions(predictionData)
+    setLoading(false)
 
-    // Listen for dashboard updates to refresh predictions
+    // Listen for updates
     const handleUpdate = () => {
-      loadPredictions()
+      const updatedDashboard = getDashboardData()
+      const updatedPredictions = generatePredictions(updatedDashboard)
+      setPredictions(updatedPredictions)
     }
 
     window.addEventListener("dashboardUpdate", handleUpdate)
     return () => window.removeEventListener("dashboardUpdate", handleUpdate)
   }, [])
-
-  const loadPredictions = () => {
-    try {
-      const dashboardData = getDashboardData()
-      const bills = getBillCalculations()
-
-      // Generate fresh predictions based on current data
-      const freshPredictions = generatePredictions(dashboardData)
-      setPredictions(freshPredictions)
-    } catch (error) {
-      console.error("Failed to load predictions:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const getTrendIcon = (trend: string) => {
     switch (trend) {
@@ -55,18 +36,18 @@ export default function Predictions() {
       case "decreasing":
         return <TrendingDown className="h-4 w-4 text-green-500" />
       default:
-        return <Minus className="h-4 w-4 text-gray-500" />
+        return <Minus className="h-4 w-4 text-blue-500" />
     }
   }
 
   const getTrendColor = (trend: string) => {
     switch (trend) {
       case "increasing":
-        return "text-red-600 bg-red-50"
+        return "text-red-600 bg-red-50 border-red-200"
       case "decreasing":
-        return "text-green-600 bg-green-50"
+        return "text-green-600 bg-green-50 border-green-200"
       default:
-        return "text-gray-600 bg-gray-50"
+        return "text-blue-600 bg-blue-50 border-blue-200"
     }
   }
 
@@ -113,11 +94,14 @@ export default function Predictions() {
 
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Predictions</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+            <Brain className="h-8 w-8" />
+            AI Predictions
+          </h1>
           <p className="text-gray-600">
             {predictions.nextMonthUsage === 0
-              ? "Start tracking your usage to get AI-powered predictions"
-              : "AI-powered insights and forecasts for your energy consumption"}
+              ? "Start tracking your usage to get AI-powered predictions and insights"
+              : "AI-powered insights and predictions based on your energy usage patterns"}
           </p>
         </div>
 
@@ -125,40 +109,37 @@ export default function Predictions() {
           <Card className="border-blue-200 bg-blue-50">
             <CardContent className="pt-6">
               <div className="text-center">
-                <Brain className="h-16 w-16 text-blue-600 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-blue-900 mb-2">Ready for AI Predictions?</h3>
+                <Brain className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-blue-900 mb-2">No Data for Predictions</h3>
                 <p className="text-blue-700 mb-4">
-                  Use the Bill Calculator to enter your meter readings. After a few calculations, our AI will provide
-                  personalized predictions and insights about your energy consumption patterns.
+                  Start using the Bill Calculator to track your energy consumption. Once you have some data, AI will
+                  analyze your patterns and provide predictions.
                 </p>
-                <div className="bg-white rounded-lg p-4 mt-4">
-                  <h4 className="font-medium text-gray-900 mb-2">What you'll get:</h4>
-                  <ul className="text-sm text-gray-600 space-y-1">
-                    <li>• Next month's usage predictions</li>
-                    <li>• Cost forecasts and trends</li>
-                    <li>• Energy efficiency scoring</li>
-                    <li>• Personalized recommendations</li>
-                  </ul>
+                <div className="space-y-2">
+                  {predictions.recommendations.map((rec, index) => (
+                    <div key={index} className="flex items-center gap-2 text-blue-800">
+                      <Lightbulb className="h-4 w-4" />
+                      <span className="text-sm">{rec}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-6">
+          <>
             {/* Prediction Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Next Month Usage</CardTitle>
-                  <Brain className="h-4 w-4 text-muted-foreground" />
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{predictions.nextMonthUsage} kWh</div>
-                  <div className="flex items-center space-x-2 mt-2">
+                  <div className="flex items-center gap-2 mt-1">
                     {getTrendIcon(predictions.trend)}
-                    <span className={`text-xs px-2 py-1 rounded-full ${getTrendColor(predictions.trend)}`}>
-                      {predictions.trend}
-                    </span>
+                    <span className="text-xs text-muted-foreground capitalize">{predictions.trend}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -166,22 +147,22 @@ export default function Predictions() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Predicted Cost</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  <Target className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">₹{predictions.nextMonthCost}</div>
-                  <p className="text-xs text-muted-foreground mt-2">Estimated bill amount</p>
+                  <p className="text-xs text-muted-foreground">Estimated bill</p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Efficiency Score</CardTitle>
-                  <Lightbulb className="h-4 w-4 text-muted-foreground" />
+                  <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className={`text-2xl font-bold ${getEfficiencyColor(predictions.efficiencyScore)}`}>
-                    {predictions.efficiencyScore}/100
+                    {predictions.efficiencyScore}%
                   </div>
                   <Progress value={predictions.efficiencyScore} className="mt-2" />
                 </CardContent>
@@ -189,12 +170,12 @@ export default function Predictions() {
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Confidence</CardTitle>
-                  <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Confidence Level</CardTitle>
+                  <Brain className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{predictions.confidence}%</div>
-                  <div className="flex items-center space-x-2 mt-2">
+                  <div className="flex items-center gap-2 mt-2">
                     <div className="flex-1 bg-gray-200 rounded-full h-2">
                       <div
                         className={`h-2 rounded-full ${getConfidenceColor(predictions.confidence)}`}
@@ -206,66 +187,91 @@ export default function Predictions() {
               </Card>
             </div>
 
-            {/* Recommendations */}
-            <Card>
+            {/* Trend Analysis */}
+            <Card className="mb-8">
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Lightbulb className="h-5 w-5" />
-                  <span>AI Recommendations</span>
-                </CardTitle>
-                <CardDescription>Personalized tips to optimize your energy consumption</CardDescription>
+                <CardTitle>Trend Analysis</CardTitle>
+                <CardDescription>Understanding your energy consumption patterns</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4">
+                <div className={`p-4 rounded-lg border ${getTrendColor(predictions.trend)}`}>
+                  <div className="flex items-center gap-3 mb-3">
+                    {getTrendIcon(predictions.trend)}
+                    <h3 className="font-semibold capitalize">{predictions.trend} Trend Detected</h3>
+                  </div>
+                  <p className="text-sm">
+                    {predictions.trend === "increasing" &&
+                      "Your energy consumption is trending upward. Consider implementing energy-saving measures to control costs."}
+                    {predictions.trend === "decreasing" &&
+                      "Great! Your energy consumption is decreasing. Keep up the good energy-saving habits."}
+                    {predictions.trend === "stable" &&
+                      "Your energy consumption is stable. This consistency makes it easier to budget and plan."}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* AI Recommendations */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lightbulb className="h-5 w-5" />
+                  AI Recommendations
+                </CardTitle>
+                <CardDescription>Personalized suggestions to optimize your energy usage</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
                   {predictions.recommendations.map((recommendation, index) => (
-                    <div key={index} className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
-                      <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
+                    <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                      <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-sm font-medium">
                         {index + 1}
                       </div>
-                      <p className="text-gray-700">{recommendation}</p>
+                      <p className="text-sm text-gray-700">{recommendation}</p>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Prediction Details */}
-            <Card>
+            {/* Prediction Accuracy */}
+            <Card className="mt-8">
               <CardHeader>
-                <CardTitle>Prediction Details</CardTitle>
+                <CardTitle>About These Predictions</CardTitle>
                 <CardDescription>How we calculate your energy forecasts</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Methodology</h4>
-                    <ul className="text-sm text-gray-600 space-y-1">
-                      <li>• Historical usage pattern analysis</li>
-                      <li>• Seasonal consumption trends</li>
-                      <li>• Appliance efficiency scoring</li>
-                      <li>• Cost optimization algorithms</li>
-                    </ul>
+                    <h4 className="font-semibold mb-3">Prediction Method:</h4>
+                    <div className="space-y-2 text-sm text-gray-600">
+                      <p>• Historical usage pattern analysis</p>
+                      <p>• Seasonal trend consideration</p>
+                      <p>• Appliance efficiency scoring</p>
+                      <p>• Cost optimization algorithms</p>
+                    </div>
                   </div>
+
                   <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Accuracy Factors</h4>
-                    <ul className="text-sm text-gray-600 space-y-1">
-                      <li>• Number of historical data points</li>
-                      <li>• Consistency in usage patterns</li>
-                      <li>• External factors (weather, etc.)</li>
-                      <li>• Appliance changes or upgrades</li>
-                    </ul>
+                    <h4 className="font-semibold mb-3">Confidence Factors:</h4>
+                    <div className="space-y-2 text-sm text-gray-600">
+                      <p>• Amount of historical data</p>
+                      <p>• Consistency in usage patterns</p>
+                      <p>• Seasonal variations</p>
+                      <p>• Recent calculation frequency</p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <p className="text-sm text-yellow-800">
-                    <strong>Note:</strong> Predictions improve with more data. Keep tracking your usage regularly for
-                    better accuracy. Last updated: {new Date(predictions.lastUpdated).toLocaleString()}
+                    <strong>Note:</strong> Predictions become more accurate as you add more bill calculations. Regular
+                    tracking helps our AI understand your consumption patterns better.
                   </p>
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </>
         )}
       </main>
     </div>
