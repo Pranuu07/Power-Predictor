@@ -1,65 +1,162 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Navigation } from "@/components/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Lightbulb, Zap, DollarSign, Clock, AlertCircle, CheckCircle, Star } from "lucide-react"
-import { getEnergyTips, getDashboardData, type EnergyTip } from "@/lib/localStorage"
+import { Lightbulb, Zap, DollarSign, Home, Thermometer, Cpu, RefreshCw } from "lucide-react"
+import { getDashboardData } from "@/lib/localStorage"
+import { ProtectedRoute } from "@/components/protected-route"
+
+interface Tip {
+  id: string
+  title: string
+  description: string
+  category: "cooling" | "lighting" | "appliances" | "general"
+  savings: string
+  difficulty: "easy" | "medium" | "hard"
+  icon: React.ReactNode
+}
+
+const allTips: Tip[] = [
+  {
+    id: "1",
+    title: "Optimize AC Temperature",
+    description: "Set your air conditioner to 24°C instead of 22°C. Each degree higher can save 6% energy.",
+    category: "cooling",
+    savings: "₹200-400/month",
+    difficulty: "easy",
+    icon: <Thermometer className="h-4 w-4" />,
+  },
+  {
+    id: "2",
+    title: "Switch to LED Bulbs",
+    description: "Replace incandescent bulbs with LED bulbs. They use 75% less energy and last 25 times longer.",
+    category: "lighting",
+    savings: "₹100-200/month",
+    difficulty: "easy",
+    icon: <Lightbulb className="h-4 w-4" />,
+  },
+  {
+    id: "3",
+    title: "Unplug Devices When Not in Use",
+    description: "Many devices consume power even when turned off. Unplug chargers, TVs, and other electronics.",
+    category: "appliances",
+    savings: "₹50-150/month",
+    difficulty: "easy",
+    icon: <Zap className="h-4 w-4" />,
+  },
+  {
+    id: "4",
+    title: "Use Natural Light",
+    description: "Open curtains and blinds during daytime to reduce the need for artificial lighting.",
+    category: "lighting",
+    savings: "₹30-80/month",
+    difficulty: "easy",
+    icon: <Home className="h-4 w-4" />,
+  },
+  {
+    id: "5",
+    title: "Regular AC Maintenance",
+    description: "Clean AC filters monthly and service annually. Dirty filters make AC work harder.",
+    category: "cooling",
+    savings: "₹150-300/month",
+    difficulty: "medium",
+    icon: <RefreshCw className="h-4 w-4" />,
+  },
+  {
+    id: "6",
+    title: "Use Ceiling Fans with AC",
+    description: "Ceiling fans help circulate cool air, allowing you to set AC temperature 2-3°C higher.",
+    category: "cooling",
+    savings: "₹100-250/month",
+    difficulty: "easy",
+    icon: <Thermometer className="h-4 w-4" />,
+  },
+  {
+    id: "7",
+    title: "Upgrade to Energy-Efficient Appliances",
+    description: "Choose 5-star rated appliances when replacing old ones. They consume significantly less power.",
+    category: "appliances",
+    savings: "₹300-600/month",
+    difficulty: "hard",
+    icon: <Cpu className="h-4 w-4" />,
+  },
+  {
+    id: "8",
+    title: "Optimize Refrigerator Settings",
+    description: "Set refrigerator temperature to 3-4°C and freezer to -18°C. Avoid keeping doors open.",
+    category: "appliances",
+    savings: "₹80-150/month",
+    difficulty: "easy",
+    icon: <Thermometer className="h-4 w-4" />,
+  },
+  {
+    id: "9",
+    title: "Use Timer Functions",
+    description: "Use timer functions on AC, water heater, and other appliances to avoid unnecessary usage.",
+    category: "general",
+    savings: "₹100-200/month",
+    difficulty: "easy",
+    icon: <Zap className="h-4 w-4" />,
+  },
+  {
+    id: "10",
+    title: "Seal Air Leaks",
+    description: "Seal gaps around doors and windows to prevent cool air from escaping and reduce AC load.",
+    category: "cooling",
+    savings: "₹150-300/month",
+    difficulty: "medium",
+    icon: <Home className="h-4 w-4" />,
+  },
+]
 
 export default function TipsPage() {
-  const [tips, setTips] = useState<EnergyTip[]>([])
-  const [loading, setLoading] = useState(true)
-  const [implementedTips, setImplementedTips] = useState<string[]>([])
+  const [selectedCategory, setSelectedCategory] = useState<string>("all")
+  const [personalizedTips, setPersonalizedTips] = useState<Tip[]>([])
+  const [dashboardData, setDashboardData] = useState<any>(null)
 
   useEffect(() => {
-    const energyTips = getEnergyTips()
-    setTips(energyTips)
-    setLoading(false)
+    const data = getDashboardData()
+    setDashboardData(data)
 
-    // Load implemented tips from localStorage
-    const implemented = localStorage.getItem("powertracker_implemented_tips")
-    if (implemented) {
-      setImplementedTips(JSON.parse(implemented))
+    // Generate personalized tips based on usage
+    let tips = [...allTips]
+
+    if (data.currentUsage > 300) {
+      // High usage - prioritize cooling and appliance tips
+      tips = tips.sort((a, b) => {
+        if (a.category === "cooling" || a.category === "appliances") return -1
+        if (b.category === "cooling" || b.category === "appliances") return 1
+        return 0
+      })
+    } else if (data.currentUsage < 100) {
+      // Low usage - focus on general and lighting tips
+      tips = tips.sort((a, b) => {
+        if (a.category === "general" || a.category === "lighting") return -1
+        if (b.category === "general" || b.category === "lighting") return 1
+        return 0
+      })
     }
 
-    // Listen for updates
-    const handleUpdate = () => {
-      const updatedTips = getEnergyTips()
-      setTips(updatedTips)
-    }
-
-    window.addEventListener("dashboardUpdate", handleUpdate)
-    return () => window.removeEventListener("dashboardUpdate", handleUpdate)
+    setPersonalizedTips(tips)
   }, [])
 
-  const toggleTipImplementation = (tipId: string) => {
-    const newImplemented = implementedTips.includes(tipId)
-      ? implementedTips.filter((id) => id !== tipId)
-      : [...implementedTips, tipId]
+  const categories = [
+    { id: "all", name: "All Tips", count: allTips.length },
+    { id: "cooling", name: "Cooling", count: allTips.filter((tip) => tip.category === "cooling").length },
+    { id: "lighting", name: "Lighting", count: allTips.filter((tip) => tip.category === "lighting").length },
+    { id: "appliances", name: "Appliances", count: allTips.filter((tip) => tip.category === "appliances").length },
+    { id: "general", name: "General", count: allTips.filter((tip) => tip.category === "general").length },
+  ]
 
-    setImplementedTips(newImplemented)
-    localStorage.setItem("powertracker_implemented_tips", JSON.stringify(newImplemented))
-  }
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority.toLowerCase()) {
-      case "critical":
-        return "bg-red-100 text-red-800 border-red-200"
-      case "high":
-        return "bg-orange-100 text-orange-800 border-orange-200"
-      case "medium":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
-      case "low":
-        return "bg-green-100 text-green-800 border-green-200"
-      default:
-        return "bg-gray-100 text-gray-800 border-gray-200"
-    }
-  }
+  const filteredTips =
+    selectedCategory === "all" ? personalizedTips : personalizedTips.filter((tip) => tip.category === selectedCategory)
 
   const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty.toLowerCase()) {
+    switch (difficulty) {
       case "easy":
         return "bg-green-100 text-green-800"
       case "medium":
@@ -71,216 +168,118 @@ export default function TipsPage() {
     }
   }
 
-  const getCategoryIcon = (category: string) => {
-    switch (category.toLowerCase()) {
-      case "lighting":
-        return <Lightbulb className="h-4 w-4" />
+  const getCategoryColor = (category: string) => {
+    switch (category) {
       case "cooling":
+        return "bg-blue-100 text-blue-800"
+      case "lighting":
+        return "bg-yellow-100 text-yellow-800"
       case "appliances":
-        return <Zap className="h-4 w-4" />
-      case "water heating":
-        return <Clock className="h-4 w-4" />
-      case "urgent":
-        return <AlertCircle className="h-4 w-4" />
-      case "getting started":
-        return <Star className="h-4 w-4" />
+        return "bg-purple-100 text-purple-800"
+      case "general":
+        return "bg-gray-100 text-gray-800"
       default:
-        return <Lightbulb className="h-4 w-4" />
+        return "bg-gray-100 text-gray-800"
     }
   }
 
-  const dashboardData = getDashboardData()
-  const implementedCount = implementedTips.length
-  const totalSavings = tips
-    .filter((tip) => implementedTips.includes(tip.id))
-    .reduce((sum, tip) => {
-      const savings = tip.savings.match(/₹(\d+)/)
-      return sum + (savings ? Number.parseInt(savings[1]) : 0)
-    }, 0)
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navigation />
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading energy tips...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navigation />
-
-      <main className="container mx-auto px-4 py-8">
+    <ProtectedRoute>
+      <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
-            <Lightbulb className="h-8 w-8" />
-            Energy Saving Tips
-          </h1>
-          <p className="text-gray-600">
-            {dashboardData.currentUsage === 0
-              ? "Personalized tips to help you save energy and reduce costs"
-              : "Personalized recommendations based on your energy usage patterns"}
-          </p>
+          <h1 className="text-3xl font-bold text-gray-900">Energy Saving Tips</h1>
+          <p className="text-gray-600 mt-2">Personalized recommendations to reduce your electricity consumption</p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Available Tips</CardTitle>
-              <Lightbulb className="h-4 w-4 text-muted-foreground" />
+        {/* Usage Summary */}
+        {dashboardData && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Your Energy Profile
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{tips.length}</div>
-              <p className="text-xs text-muted-foreground">Personalized for you</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">{dashboardData.currentUsage} kWh</div>
+                  <div className="text-sm text-gray-600">Current Usage</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">₹{dashboardData.savingsPotential}</div>
+                  <div className="text-sm text-gray-600">Potential Savings</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {dashboardData.currentUsage > 300 ? "High" : dashboardData.currentUsage > 150 ? "Medium" : "Low"}
+                  </div>
+                  <div className="text-sm text-gray-600">Usage Level</div>
+                </div>
+              </div>
             </CardContent>
           </Card>
+        )}
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Implemented</CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{implementedCount}</div>
-              <p className="text-xs text-muted-foreground">Tips you're using</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Potential Savings</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">₹{totalSavings}</div>
-              <p className="text-xs text-muted-foreground">Per month</p>
-            </CardContent>
-          </Card>
+        {/* Category Filter */}
+        <div className="flex flex-wrap gap-2 mb-8">
+          {categories.map((category) => (
+            <Button
+              key={category.id}
+              variant={selectedCategory === category.id ? "default" : "outline"}
+              onClick={() => setSelectedCategory(category.id)}
+              className="flex items-center gap-2"
+            >
+              {category.name}
+              <Badge variant="secondary" className="ml-1">
+                {category.count}
+              </Badge>
+            </Button>
+          ))}
         </div>
 
         {/* Tips Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tips.map((tip) => {
-            const isImplemented = implementedTips.includes(tip.id)
-
-            return (
-              <Card key={tip.id} className={`relative ${isImplemented ? "ring-2 ring-green-500 bg-green-50" : ""}`}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      {getCategoryIcon(tip.category)}
-                      <Badge variant="outline" className="text-xs">
-                        {tip.category}
-                      </Badge>
-                    </div>
-                    <Badge className={getPriorityColor(tip.priority)}>{tip.priority}</Badge>
+          {filteredTips.map((tip) => (
+            <Card key={tip.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    {tip.icon}
+                    <CardTitle className="text-lg">{tip.title}</CardTitle>
                   </div>
-                  <CardTitle className="text-lg">{tip.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="mb-4">{tip.description}</CardDescription>
+                  <Badge className={getCategoryColor(tip.category)}>{tip.category}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-sm mb-4">{tip.description}</CardDescription>
 
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Potential Savings:</span>
-                      <Badge variant="secondary" className="bg-green-100 text-green-800">
-                        {tip.savings}
-                      </Badge>
-                    </div>
-
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Difficulty:</span>
-                      <Badge className={getDifficultyColor(tip.difficulty)}>{tip.difficulty}</Badge>
-                    </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge className={getDifficultyColor(tip.difficulty)}>{tip.difficulty}</Badge>
                   </div>
-
-                  <Button
-                    onClick={() => toggleTipImplementation(tip.id)}
-                    className={`w-full mt-4 ${
-                      isImplemented ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700"
-                    }`}
-                  >
-                    {isImplemented ? (
-                      <>
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Implemented
-                      </>
-                    ) : (
-                      <>
-                        <Star className="h-4 w-4 mr-2" />
-                        Mark as Implemented
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-
-                {isImplemented && (
-                  <div className="absolute top-2 right-2">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-green-600">{tip.savings}</div>
+                    <div className="text-xs text-gray-500">potential savings</div>
                   </div>
-                )}
-              </Card>
-            )
-          })}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
-        {/* Implementation Progress */}
-        {implementedCount > 0 && (
-          <Card className="mt-8 border-green-200 bg-green-50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-green-800">
-                <CheckCircle className="h-5 w-5" />
-                Great Progress!
-              </CardTitle>
-              <CardDescription className="text-green-700">
-                You've implemented {implementedCount} energy-saving tip{implementedCount !== 1 ? "s" : ""}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-green-800">Implementation Progress:</span>
-                  <span className="font-medium text-green-800">
-                    {implementedCount}/{tips.length} tips
-                  </span>
-                </div>
-                <div className="w-full bg-green-200 rounded-full h-2">
-                  <div
-                    className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${(implementedCount / tips.length) * 100}%` }}
-                  ></div>
-                </div>
-                <p className="text-sm text-green-700">
-                  Potential monthly savings: <strong>₹{totalSavings}</strong>
-                </p>
-              </div>
+        {filteredTips.length === 0 && (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <Lightbulb className="h-16 w-16 text-gray-300 mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No Tips Found</h3>
+              <p className="text-gray-600 text-center">
+                No tips available for the selected category. Try selecting a different category.
+              </p>
             </CardContent>
           </Card>
         )}
-
-        {/* Getting Started */}
-        {dashboardData.currentUsage === 0 && (
-          <Card className="mt-8 border-blue-200 bg-blue-50">
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <Lightbulb className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-blue-900 mb-2">Start Your Energy Journey</h3>
-                <p className="text-blue-700 mb-4">
-                  Begin tracking your energy usage with the Bill Calculator to get more personalized tips based on your
-                  actual consumption patterns.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </main>
-    </div>
+      </div>
+    </ProtectedRoute>
   )
 }
