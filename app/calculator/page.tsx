@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Navigation } from "@/components/navigation"
 import { Calculator, Zap, DollarSign } from "lucide-react"
-import { saveBillCalculation, generatePredictions, getDashboardData } from "@/lib/localStorage"
+import { saveBillCalculation, generatePredictions, getDashboardData, updateMonthlyHistory } from "@/lib/localStorage"
 
 interface BillResult {
   previousReading: number
@@ -48,7 +48,7 @@ export default function BillCalculator() {
         const data = await response.json()
         setResult(data)
 
-        // Save to local storage
+        // Save to local storage and update history
         saveBillCalculation({
           previousReading: data.previousReading,
           currentReading: data.currentReading,
@@ -59,7 +59,10 @@ export default function BillCalculator() {
           totalBill: data.totalBill,
         })
 
-        // Update predictions
+        // Update monthly history
+        updateMonthlyHistory(data.unitsConsumed, data.totalBill)
+
+        // Update predictions with new data
         const dashboardData = getDashboardData()
         generatePredictions(dashboardData)
 

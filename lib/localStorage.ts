@@ -120,6 +120,8 @@ export const saveBillCalculation = (calculation: Omit<BillCalculation, "id" | "t
     currentBill: calculation.totalBill,
   })
 
+  updateMonthlyHistory(calculation.unitsConsumed, calculation.totalBill)
+
   return newBill
 }
 
@@ -179,6 +181,7 @@ export const getPredictions = (): Prediction => {
   return JSON.parse(stored)
 }
 
+// Update the generatePredictions function
 export const generatePredictions = (dashboardData: DashboardData): Prediction => {
   const bills = getBillCalculations()
   const currentUsage = dashboardData.currentUsage
@@ -217,6 +220,12 @@ export const generatePredictions = (dashboardData: DashboardData): Prediction =>
       recommendations: generateRecommendations(currentUsage, efficiencyScore),
       lastUpdated: new Date().toISOString(),
     }
+
+    // Update dashboard with AI prediction
+    saveDashboardData({
+      aiPrediction: nextMonthUsage,
+      savingsPotential: Math.max(0, Math.round((currentUsage - nextMonthUsage) * 5.5)),
+    })
   }
 
   if (typeof window !== "undefined") {
@@ -224,6 +233,40 @@ export const generatePredictions = (dashboardData: DashboardData): Prediction =>
   }
 
   return predictions
+}
+
+// Add function to update monthly data with history
+export const updateMonthlyHistory = (unitsConsumed: number, totalBill: number): void => {
+  if (typeof window === "undefined") return
+
+  const dashboardData = getDashboardData()
+  const currentMonth = new Date().toLocaleDateString("en-US", { month: "short" })
+
+  // Update monthly data
+  const updatedMonthlyData = dashboardData.monthlyData.map((month) => {
+    if (month.month === currentMonth) {
+      return {
+        ...month,
+        usage: unitsConsumed,
+        cost: totalBill,
+      }
+    }
+    return month
+  })
+
+  // Update usage breakdown with realistic distribution
+  const updatedUsageBreakdown = [
+    { category: "Air Conditioning", usage: Math.round(unitsConsumed * 0.4), color: "#3b82f6" },
+    { category: "Lighting", usage: Math.round(unitsConsumed * 0.2), color: "#10b981" },
+    { category: "Water Heating", usage: Math.round(unitsConsumed * 0.15), color: "#f59e0b" },
+    { category: "Refrigerator", usage: Math.round(unitsConsumed * 0.15), color: "#ef4444" },
+    { category: "Others", usage: Math.round(unitsConsumed * 0.1), color: "#8b5cf6" },
+  ]
+
+  saveDashboardData({
+    monthlyData: updatedMonthlyData,
+    usageBreakdown: updatedUsageBreakdown,
+  })
 }
 
 function generateRecommendations(usage: number, efficiency: number): string[] {
