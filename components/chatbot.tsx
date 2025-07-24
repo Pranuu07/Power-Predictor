@@ -5,12 +5,20 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { MessageCircle, X, Send, Trash2 } from "lucide-react"
+import {
+  getChatMessages,
+  saveChatMessage,
+  clearChatMessages,
+  getDashboardData,
+  getBillCalculations,
+  getPredictions,
+} from "@/lib/localStorage"
 
 interface Message {
-  _id?: string
+  id: string
   type: "user" | "bot"
   content: string
-  timestamp: Date
+  timestamp: string
 }
 
 export function ChatBot() {
@@ -25,69 +33,60 @@ export function ChatBot() {
     }
   }, [isOpen])
 
-  const loadMessages = async () => {
-    try {
-      const response = await fetch("/api/chatbot/messages")
-      const data = await response.json()
-      if (data.messages && data.messages.length > 0) {
-        setMessages(data.messages)
-      } else {
-        // Add welcome message if no messages exist
-        const welcomeMessage = {
-          type: "bot" as const,
-          content:
-            "Hi! I'm your AI energy assistant powered by Gemini. I can help you with:\n\n• Real-time usage analysis\n• Personalized energy-saving tips\n• Bill calculations and predictions\n• Smart recommendations based on your data\n\nStart by using the Bill Calculator to track your consumption, then ask me anything!",
-          timestamp: new Date(),
-        }
-        setMessages([welcomeMessage])
+  const loadMessages = () => {
+    const storedMessages = getChatMessages()
+    if (storedMessages.length > 0) {
+      setMessages(storedMessages)
+    } else {
+      // Add welcome message if no messages exist
+      const welcomeMessage = {
+        id: "welcome",
+        type: "bot" as const,
+        content:
+          "Hi! I'm your AI energy assistant powered by Gemini. I can help you with:\n\n• Real-time usage analysis\n• Personalized energy-saving tips\n• Bill calculations and predictions\n• Smart recommendations based on your data\n\nStart by using the Bill Calculator to track your consumption, then ask me anything!",
+        timestamp: new Date().toISOString(),
       }
-    } catch (error) {
-      console.error("Failed to load messages:", error)
-      setMessages([
-        {
-          type: "bot",
-          content: "Hi! I'm your AI energy assistant. How can I help you save energy today?",
-          timestamp: new Date(),
-        },
-      ])
+      setMessages([welcomeMessage])
     }
   }
 
   const handleSend = async () => {
     if (!input.trim() || loading) return
 
-    const userMessage: Message = {
-      type: "user",
-      content: input,
-      timestamp: new Date(),
-    }
-
+    // Save user message locally
+    const userMessage = saveChatMessage("user", input)
     setMessages((prev) => [...prev, userMessage])
     setLoading(true)
 
     try {
+      // Get current local data for context
+      const dashboardData = getDashboardData()
+      const billCalculations = getBillCalculations()
+      const recentCalculation = billCalculations[billCalculations.length - 1]
+      const predictions = getPredictions()
+
       const response = await fetch("/api/chatbot/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input }),
+        body: JSON.stringify({
+          message: input,
+          dashboardData,
+          recentCalculation,
+          predictions,
+        }),
       })
 
       const data = await response.json()
 
-      const botMessage: Message = {
-        type: "bot",
-        content: data.response,
-        timestamp: new Date(),
-      }
-
+      // Save bot message locally
+      const botMessage = saveChatMessage("bot", data.response)
       setMessages((prev) => [...prev, botMessage])
     } catch (error) {
       console.error("Chat error:", error)
-      const errorMessage: Message = {
-        type: "bot",
-        content: "Sorry, I'm having trouble connecting to my AI brain right now. Please try again in a moment.",
-        timestamp: new Date(),
-      }
+      const errorMessage = saveChatMessage(
+        "bot",
+        "Sorry, I'm having trouble connecting to my AI brain right now. Please try again in a moment.",
+      )
       setMessages((prev) => [...prev, errorMessage])
     } finally {
       setLoading(false)
@@ -95,19 +94,15 @@ export function ChatBot() {
     }
   }
 
-  const clearChat = async () => {
-    try {
-      await fetch("/api/chatbot/messages", { method: "DELETE" })
-      setMessages([
-        {
-          type: "bot",
-          content: "Chat history cleared! How can I help you with your energy management today?",
-          timestamp: new Date(),
-        },
-      ])
-    } catch (error) {
-      console.error("Failed to clear chat:", error)
+  const clearChat = () => {
+    clearChatMessages()
+    const clearMessage = {
+      id: "cleared",
+      type: "bot" as const,
+      content: "Chat history cleared! How can I help you with your energy management today?",
+      timestamp: new Date().toISOString(),
     }
+    setMessages([clearMessage])
   }
 
   if (!isOpen) {
@@ -141,7 +136,7 @@ export function ChatBot() {
         <div className="flex-1 overflow-y-auto space-y-2 mb-4 max-h-64">
           {messages.map((message, index) => (
             <div
-              key={message._id || index}
+              key={message.id || index}
               className={`p-2 rounded-lg text-sm whitespace-pre-line ${
                 message.type === "user"
                   ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white ml-8"

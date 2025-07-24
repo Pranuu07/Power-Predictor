@@ -1,38 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { connectToDatabase } from "@/lib/mongodb"
 
 export async function POST(request: NextRequest) {
   try {
-    const { message } = await request.json()
-    const { db } = await connectToDatabase()
+    const { message, dashboardData, recentCalculation, predictions } = await request.json()
 
-    // Save user message
-    const userMessage = {
-      type: "user",
-      content: message,
-      timestamp: new Date(),
-    }
-    await db.collection("chatMessages").insertOne(userMessage)
-
-    // Get current dashboard data for context
-    const dashboardData = await db.collection("dashboard").findOne({ type: "main" })
-    const recentCalculation = await db.collection("billCalculations").findOne({}, { sort: { timestamp: -1 } })
-    const predictions = await db.collection("predictions").findOne({ type: "monthly" })
-
-    // Generate response using Gemini AI
+    // Generate response using Gemini AI with local data context
     const botResponse = await generateGeminiResponse(message, {
       dashboardData,
       recentCalculation,
       predictions,
     })
-
-    // Save bot message
-    const botMessage = {
-      type: "bot",
-      content: botResponse,
-      timestamp: new Date(),
-    }
-    await db.collection("chatMessages").insertOne(botMessage)
 
     return NextResponse.json({ response: botResponse })
   } catch (error) {

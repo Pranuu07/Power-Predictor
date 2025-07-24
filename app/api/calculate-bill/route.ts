@@ -1,10 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { connectToDatabase } from "@/lib/mongodb"
 
 export async function POST(request: NextRequest) {
   try {
     const { previousReading, currentReading } = await request.json()
-    const { db } = await connectToDatabase()
 
     if (!previousReading || !currentReading) {
       return NextResponse.json({ message: "Previous and current readings are required" }, { status: 400 })
@@ -59,24 +57,14 @@ export async function POST(request: NextRequest) {
       fixedCharges,
       taxes,
       totalBill: Math.round(totalBill),
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
+      slabBreakdown: [
+        { range: "0-100 units", rate: 3, amount: Math.min(unitsConsumed, 100) * 3 },
+        { range: "101-200 units", rate: 4.5, amount: Math.max(0, Math.min(unitsConsumed - 100, 100)) * 4.5 },
+        { range: "201-300 units", rate: 6, amount: Math.max(0, Math.min(unitsConsumed - 200, 100)) * 6 },
+        { range: "Above 300 units", rate: 7.5, amount: Math.max(0, unitsConsumed - 300) * 7.5 },
+      ].filter((slab) => slab.amount > 0),
     }
-
-    // Save calculation to database
-    await db.collection("billCalculations").insertOne(billData)
-
-    // Update dashboard with new usage data
-    await db.collection("dashboard").updateOne(
-      { type: "main" },
-      {
-        $set: {
-          currentUsage: unitsConsumed,
-          currentBill: Math.round(totalBill),
-          updatedAt: new Date(),
-        },
-      },
-      { upsert: true },
-    )
 
     return NextResponse.json(billData)
   } catch (error) {

@@ -8,6 +8,7 @@ import { CostChart } from "@/components/cost-chart"
 import { UsageBreakdown } from "@/components/usage-breakdown"
 import { ChatBot } from "@/components/chatbot"
 import { Zap, TrendingUp, DollarSign, Brain } from "lucide-react"
+import { getDashboardData } from "@/lib/localStorage"
 
 interface DashboardData {
   currentUsage: number
@@ -23,20 +24,27 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchDashboardData()
-  }, [])
+    // Load data from localStorage
+    const dashboardData = getDashboardData()
+    setData(dashboardData)
+    setLoading(false)
 
-  const fetchDashboardData = async () => {
-    try {
-      const response = await fetch("/api/dashboard")
-      const dashboardData = await response.json()
-      setData(dashboardData)
-    } catch (error) {
-      console.error("Failed to fetch dashboard data:", error)
-    } finally {
-      setLoading(false)
+    // Listen for storage changes to update dashboard in real-time
+    const handleStorageChange = () => {
+      const updatedData = getDashboardData()
+      setData(updatedData)
     }
-  }
+
+    window.addEventListener("storage", handleStorageChange)
+
+    // Custom event for same-tab updates
+    window.addEventListener("dashboardUpdate", handleStorageChange)
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange)
+      window.removeEventListener("dashboardUpdate", handleStorageChange)
+    }
+  }, [])
 
   if (loading) {
     return (
@@ -70,7 +78,11 @@ export default function Dashboard() {
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Energy Dashboard</h1>
-          <p className="text-gray-600">Monitor your power consumption and optimize energy usage</p>
+          <p className="text-gray-600">
+            {data.currentUsage === 0
+              ? "Start tracking your power consumption with the Bill Calculator"
+              : "Monitor your power consumption and optimize energy usage"}
+          </p>
         </div>
 
         {/* Stats Cards */}
@@ -82,7 +94,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{data.currentUsage} kWh</div>
-              <p className="text-xs text-muted-foreground">This month</p>
+              <p className="text-xs text-muted-foreground">{data.currentUsage === 0 ? "No data yet" : "This month"}</p>
             </CardContent>
           </Card>
 
@@ -93,7 +105,9 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">₹{data.currentBill}</div>
-              <p className="text-xs text-muted-foreground">Estimated</p>
+              <p className="text-xs text-muted-foreground">
+                {data.currentBill === 0 ? "Calculate first bill" : "Estimated"}
+              </p>
             </CardContent>
           </Card>
 
@@ -104,7 +118,9 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{data.aiPrediction} kWh</div>
-              <p className="text-xs text-muted-foreground">Next month</p>
+              <p className="text-xs text-muted-foreground">
+                {data.aiPrediction === 0 ? "Need more data" : "Next month"}
+              </p>
             </CardContent>
           </Card>
 
@@ -115,7 +131,9 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">₹{data.savingsPotential}</div>
-              <p className="text-xs text-muted-foreground">Per month</p>
+              <p className="text-xs text-muted-foreground">
+                {data.savingsPotential === 0 ? "Start tracking" : "Per month"}
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -125,7 +143,11 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Usage Trend</CardTitle>
-              <CardDescription>Monthly power consumption over time</CardDescription>
+              <CardDescription>
+                {data.currentUsage === 0
+                  ? "Chart will populate as you add bill calculations"
+                  : "Monthly power consumption over time"}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <UsageChart data={data.monthlyData} />
@@ -135,7 +157,11 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Cost Analysis</CardTitle>
-              <CardDescription>Monthly electricity costs</CardDescription>
+              <CardDescription>
+                {data.currentBill === 0
+                  ? "Cost trends will appear after bill calculations"
+                  : "Monthly electricity costs"}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <CostChart data={data.monthlyData} />
@@ -147,12 +173,31 @@ export default function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Usage Breakdown</CardTitle>
-            <CardDescription>Power consumption by appliance category</CardDescription>
+            <CardDescription>
+              {data.currentUsage === 0
+                ? "Appliance breakdown will show after you start tracking usage"
+                : "Power consumption by appliance category"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <UsageBreakdown data={data.usageBreakdown} />
           </CardContent>
         </Card>
+
+        {data.currentUsage === 0 && (
+          <Card className="mt-8 border-blue-200 bg-blue-50">
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <Zap className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-blue-900 mb-2">Ready to Start Tracking?</h3>
+                <p className="text-blue-700 mb-4">
+                  Use the Bill Calculator to enter your meter readings and begin monitoring your energy consumption.
+                  Your dashboard will populate with real data as you track your usage!
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </main>
 
       <ChatBot />
