@@ -2,14 +2,12 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { AuthProvider } from "@/components/auth-provider"
-import { Toaster } from "@/components/ui/toaster"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Power Consumption Dashboard",
-  description: "Track and manage your electricity usage with AI-powered insights",
+  title: "PowerTracker - Smart Energy Management",
+  description: "Track your power consumption, calculate bills, and save energy with AI-powered insights",
     generator: 'v0.dev'
 }
 
@@ -20,12 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <AuthProvider>
-          {children}
-          <Toaster />
-        </AuthProvider>
-      </body>
+      <body className={inter.className}>{children}</body>
     </html>
   )
 }
